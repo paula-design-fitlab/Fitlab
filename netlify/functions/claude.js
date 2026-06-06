@@ -14,13 +14,29 @@ exports.handler = async (event) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: body.max_tokens || 1000 }
+          generationConfig: { 
+            maxOutputTokens: body.max_tokens || 1000,
+            temperature: 0.7
+          }
         })
       }
     );
 
     const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    console.log("Gemini response status:", response.status);
+    console.log("Gemini data:", JSON.stringify(data).substring(0, 500));
+
+    if (!response.ok) {
+      console.error("Gemini API error:", data);
+      return {
+        statusCode: 500,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        body: JSON.stringify({ error: "Gemini API error: " + JSON.stringify(data) })
+      };
+    }
+
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    console.log("Extracted text:", text.substring(0, 300));
 
     return {
       statusCode: 200,
@@ -30,6 +46,7 @@ exports.handler = async (event) => {
       })
     };
   } catch (err) {
+    console.error("Function error:", err.message);
     return {
       statusCode: 500,
       headers: { "Access-Control-Allow-Origin": "*" },
