@@ -576,10 +576,19 @@ function LibraryScreen({exercises,setExercises,T}){
         </div>
         {editingPhoto==="variation"&&<Card T={T} style={{marginBottom:16,border:`1px solid ${T.accent}44`}}><div style={{fontSize:13,fontWeight:600,marginBottom:10,color:T.accent}}>CAMBIAR FOTO</div><PhotoUpload current={selVar.photo} onSave={saveVarPhoto} T={T}/></Card>}
         <Card T={T}>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
-            <Badge color={T.accent} T={T}>{ex?.primary}</Badge>
-            {ex?.secondary&&<Badge color={T.blue} T={T}>{ex.secondary}</Badge>}
-            <Badge color={T.muted} T={T}>{selVar.material}</Badge>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              <Badge color={T.accent} T={T}>{ex?.primary}</Badge>
+              {ex?.secondary&&<Badge color={T.blue} T={T}>{ex.secondary}</Badge>}
+              <Badge color={T.muted} T={T}>{selVar.material}</Badge>
+            </div>
+            <button onClick={async()=>{
+              if(!window.confirm("¿Eliminar esta variación?")) return;
+              setExercises(exercises.map(e=>({...e,variations:e.variations.filter(v=>v.id!==selVar.id)})));
+              setSelVar(null);
+              try{ await sb.delete("variaciones",`id=eq.${selVar.id}`); }
+              catch(e){ console.error("Error:",e); }
+            }} className="tap" style={{background:"#ff444415",border:"1px solid #ff444430",borderRadius:8,padding:"5px 10px",color:"#ff5555",fontSize:12,cursor:"pointer",flexShrink:0}}>🗑 Eliminar</button>
           </div>
           {selVar.video&&selVar.video.length>0&&(
             <div style={{marginBottom:12}}>
@@ -615,7 +624,21 @@ function LibraryScreen({exercises,setExercises,T}){
           <button onClick={()=>setEditingPhoto("exercise")} className="tap" style={{position:"absolute",bottom:10,right:10,background:"#000a",borderRadius:10,border:`1px solid ${T.border}`,padding:"6px 12px",color:T.text,fontSize:12,cursor:"pointer"}}>📷 Editar foto</button>
         </div>
         {editingPhoto==="exercise"&&<Card T={T} style={{marginBottom:16,border:`1px solid ${T.accent}44`}}><div style={{fontSize:13,fontWeight:600,marginBottom:10,color:T.accent}}>FOTO DE PORTADA</div><PhotoUpload current={selected.photo} onSave={saveExPhoto} T={T}/></Card>}
-        <div style={{display:"flex",gap:8,marginBottom:16}}><Badge color={T.accent} T={T}>{selected.primary}</Badge>{selected.secondary&&<Badge color={T.blue} T={T}>{selected.secondary}</Badge>}</div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+          <div style={{display:"flex",gap:8}}>
+            <Badge color={T.accent} T={T}>{selected.primary}</Badge>
+            {selected.secondary&&<Badge color={T.blue} T={T}>{selected.secondary}</Badge>}
+          </div>
+          <button onClick={async()=>{
+            if(!window.confirm("¿Eliminar este ejercicio y todas sus variaciones?")) return;
+            setExercises(exercises.filter(e=>e.id!==selected.id));
+            setSelected(null);
+            try{
+              await sb.delete("variaciones",`ejercicio_id=eq.${selected.id}`);
+              await sb.delete("ejercicios",`id=eq.${selected.id}`);
+            } catch(e){ console.error("Error:",e); }
+          }} className="tap" style={{background:"#ff444415",border:"1px solid #ff444430",borderRadius:8,padding:"5px 10px",color:"#ff5555",fontSize:12,cursor:"pointer"}}>🗑 Eliminar</button>
+        </div>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
           <SectionTitle T={T}>VARIACIONES</SectionTitle>
           <Btn T={T} onClick={()=>setCreatingVar(true)} variant="ghost" style={{fontSize:13,padding:"9px 14px"}}>+ Añadir</Btn>
