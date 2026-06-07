@@ -1886,7 +1886,12 @@ function ProgressScreen({profile,logs,setLogs,exercises,sessions,T}){
                           <Input T={T} label="Reps" value={editLogReps} onChange={setEditLogReps} type="number"/>
                         </div>
                         <div style={{display:"flex",gap:8}}>
-                          <Btn T={T} onClick={()=>{setLogs(logs.map(x=>x.id===l.id?{...x,kg:+editLogKg,reps:+editLogReps}:x));setEditingLog(null);}} full style={{fontSize:12,padding:"9px"}}>✓</Btn>
+                          <Btn T={T} onClick={async()=>{
+                            setLogs(logs.map(x=>x.id===l.id?{...x,kg:+editLogKg,reps:+editLogReps}:x));
+                            setEditingLog(null);
+                            try{ await sb.patch("registro_series",`id=eq.${l.id}`,{peso_kg:+editLogKg,repeticiones:+editLogReps}); }
+                            catch(e){ console.error("Error editando serie:",e); }
+                          }} full style={{fontSize:12,padding:"9px"}}>✓</Btn>
                           <Btn T={T} onClick={()=>setEditingLog(null)} variant="ghost" style={{fontSize:12,padding:"9px"}}>✕</Btn>
                         </div>
                       </div>
@@ -1897,7 +1902,11 @@ function ProgressScreen({profile,logs,setLogs,exercises,sessions,T}){
                         <div style={{display:"flex",gap:4}}>
                           <button onClick={()=>{setEditingLog(l.id);setEditLogKg(String(l.kg));setEditLogReps(String(l.reps));}} className="tap"
                             style={{background:"none",border:`1px solid ${T.border}`,borderRadius:6,padding:"2px 7px",color:T.sub,fontSize:11,cursor:"pointer"}}>✏️</button>
-                          <button onClick={()=>setLogs(logs.filter(x=>x.id!==l.id))} className="tap"
+                          <button onClick={async()=>{
+                            setLogs(logs.filter(x=>x.id!==l.id));
+                            try{ await sb.delete("registro_series",`id=eq.${l.id}`); }
+                            catch(e){ console.error("Error borrando serie:",e); }
+                          }} className="tap"
                             style={{background:"#ff444415",border:"1px solid #ff444430",borderRadius:6,padding:"2px 7px",color:"#ff5555",fontSize:11,cursor:"pointer"}}>🗑</button>
                         </div>
                       </div>
