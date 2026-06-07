@@ -1894,8 +1894,12 @@ function ProgressScreen({profile,logs,setLogs,exercises,sessions,T}){
                       <div key={l.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:T.surface,borderRadius:8,padding:"7px 10px",marginBottom:4}}>
                         <span style={{fontSize:12,color:T.sub}}>Serie {l.set}</span>
                         <span style={{fontSize:13,fontWeight:600}}>{l.kg} kg · {l.reps} reps</span>
-                        <button onClick={()=>{setEditingLog(l.id);setEditLogKg(String(l.kg));setEditLogReps(String(l.reps));}} className="tap"
-                          style={{background:"none",border:`1px solid ${T.border}`,borderRadius:6,padding:"2px 7px",color:T.sub,fontSize:11,cursor:"pointer"}}>✏️</button>
+                        <div style={{display:"flex",gap:4}}>
+                          <button onClick={()=>{setEditingLog(l.id);setEditLogKg(String(l.kg));setEditLogReps(String(l.reps));}} className="tap"
+                            style={{background:"none",border:`1px solid ${T.border}`,borderRadius:6,padding:"2px 7px",color:T.sub,fontSize:11,cursor:"pointer"}}>✏️</button>
+                          <button onClick={()=>setLogs(logs.filter(x=>x.id!==l.id))} className="tap"
+                            style={{background:"#ff444415",border:"1px solid #ff444430",borderRadius:6,padding:"2px 7px",color:"#ff5555",fontSize:11,cursor:"pointer"}}>🗑</button>
+                        </div>
                       </div>
                     )
                   ))}
