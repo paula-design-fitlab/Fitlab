@@ -505,6 +505,42 @@ function LibraryScreen({exercises,setExercises,T}){
   const[selVar,setSelVar]=useState(null);
   const[editingPhoto,setEditingPhoto]=useState(null);
   const[viewerSrc,setViewerSrc]=useState(null);
+  // New exercise
+  const[creatingEx,setCreatingEx]=useState(false);
+  const[newExName,setNewExName]=useState("");
+  const[newExPrimary,setNewExPrimary]=useState("Glúteo");
+  const[newExSecondary,setNewExSecondary]=useState("");
+  const[newExEmoji,setNewExEmoji]=useState("💪");
+  // New variation
+  const[creatingVar,setCreatingVar]=useState(false);
+  const[newVarName,setNewVarName]=useState("");
+  const[newVarMaterial,setNewVarMaterial]=useState("Máquina");
+  const[newVarNotes,setNewVarNotes]=useState("");
+
+  const EMOJIS_EX=["💪","🍑","🦵","🏋️","🔥","🏃","🧘","🎯","⬆️","🔄","🤸","🏊"];
+  const MATERIALS=["Máquina","Multipower","Barra libre","Mancuerna","Polea","Kettlebells","Banda elástica","Peso corporal","Banco plano","Banco inclinado","Esterilla","Discos","Cajón pliométrico"];
+
+  const saveNewExercise=async()=>{
+    if(!newExName.trim()) return;
+    const id="E"+Date.now();
+    const newEx={id,name:newExName.trim(),primary:newExPrimary,secondary:newExSecondary,emoji:newExEmoji,photo:"",variations:[]};
+    setExercises([...exercises,newEx]);
+    try{ await sb.post("ejercicios",{id,nombre:newExName.trim(),grupo_principal:newExPrimary,grupo_secundario:newExSecondary,emoji:newExEmoji,foto_url:""}); }
+    catch(e){console.error("Error guardando ejercicio:",e);}
+    setCreatingEx(false);setNewExName("");setNewExPrimary("Glúteo");setNewExSecondary("");setNewExEmoji("💪");
+    setSelected(newEx);
+  };
+
+  const saveNewVariation=async()=>{
+    if(!newVarName.trim()||!selected) return;
+    const id="V"+Date.now();
+    const newVar={id,name:newVarName.trim(),material:newVarMaterial,photo:"",video:"",notes:newVarNotes};
+    setExercises(exercises.map(e=>e.id===selected.id?{...e,variations:[...e.variations,newVar]}:e));
+    setSelected({...selected,variations:[...selected.variations,newVar]});
+    try{ await sb.post("variaciones",{id,ejercicio_id:selected.id,nombre:newVarName.trim(),material:newVarMaterial,notas:newVarNotes,foto_url:"",video_url:""}); }
+    catch(e){console.error("Error guardando variación:",e);}
+    setCreatingVar(false);setNewVarName("");setNewVarMaterial("Máquina");setNewVarNotes("");
+  };
   const groups=["Todos",...MUSCLE_GROUPS];
   const filtered=filter==="Todos"?exercises:exercises.filter(e=>e.primary===filter||e.secondary===filter);
   const saveExPhoto=async photo=>{
@@ -580,7 +616,31 @@ function LibraryScreen({exercises,setExercises,T}){
         </div>
         {editingPhoto==="exercise"&&<Card T={T} style={{marginBottom:16,border:`1px solid ${T.accent}44`}}><div style={{fontSize:13,fontWeight:600,marginBottom:10,color:T.accent}}>FOTO DE PORTADA</div><PhotoUpload current={selected.photo} onSave={saveExPhoto} T={T}/></Card>}
         <div style={{display:"flex",gap:8,marginBottom:16}}><Badge color={T.accent} T={T}>{selected.primary}</Badge>{selected.secondary&&<Badge color={T.blue} T={T}>{selected.secondary}</Badge>}</div>
-        <SectionTitle T={T}>VARIACIONES</SectionTitle>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+          <SectionTitle T={T}>VARIACIONES</SectionTitle>
+          <Btn T={T} onClick={()=>setCreatingVar(true)} variant="ghost" style={{fontSize:13,padding:"9px 14px"}}>+ Añadir</Btn>
+        </div>
+
+        {creatingVar&&(
+          <Card T={T} style={{marginBottom:16,border:`1px solid ${T.accent}44`}}>
+            <div style={{fontSize:13,color:T.accent,fontWeight:700,marginBottom:12}}>NUEVA VARIACIÓN</div>
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              <Input T={T} label="Nombre" value={newVarName} onChange={setNewVarName} placeholder="Ej: Hip Thrust — Máquina"/>
+              <div>
+                <div style={{fontSize:11,color:T.sub,fontWeight:600,marginBottom:6}}>MATERIAL</div>
+                <select value={newVarMaterial} onChange={e=>setNewVarMaterial(e.target.value)} style={{width:"100%",background:"#1c1c22",border:`1px solid ${T.border}`,borderRadius:11,padding:"11px 14px",color:T.text,fontSize:15}}>
+                  {MATERIALS.map(m=><option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+              <Input T={T} label="Notas técnicas (opcional)" value={newVarNotes} onChange={setNewVarNotes} placeholder="Ej: Mantén la espalda recta"/>
+              <div style={{display:"flex",gap:8}}>
+                <Btn T={T} onClick={saveNewVariation} full>✓ Guardar</Btn>
+                <Btn T={T} onClick={()=>setCreatingVar(false)} variant="ghost">✕</Btn>
+              </div>
+            </div>
+          </Card>
+        )}
+
         <div className="stagger" style={{display:"flex",flexDirection:"column",gap:10}}>
           {selected.variations.map(v=>(
             <Card key={v.id} T={T} onClick={()=>setSelVar(v)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
@@ -596,7 +656,43 @@ function LibraryScreen({exercises,setExercises,T}){
   }
   return(
     <div className="page" style={{padding:"0 16px 100px"}}>
-      <div style={{padding:"24px 0 16px"}}><SectionTitle T={T}>EJERCICIOS</SectionTitle></div>
+      <div style={{padding:"24px 0 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <SectionTitle T={T}>EJERCICIOS</SectionTitle>
+        <Btn T={T} onClick={()=>setCreatingEx(true)} style={{fontSize:13,padding:"9px 14px"}}>+ Nuevo</Btn>
+      </div>
+
+      {creatingEx&&(
+        <Card T={T} style={{marginBottom:16,border:`1px solid ${T.accent}44`}}>
+          <div style={{fontSize:13,color:T.accent,fontWeight:700,marginBottom:12}}>NUEVO EJERCICIO</div>
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            <Input T={T} label="Nombre" value={newExName} onChange={setNewExName} placeholder="Ej: Hip Thrust"/>
+            <div>
+              <div style={{fontSize:11,color:T.sub,fontWeight:600,marginBottom:6}}>GRUPO PRINCIPAL</div>
+              <select value={newExPrimary} onChange={e=>setNewExPrimary(e.target.value)} style={{width:"100%",background:"#1c1c22",border:`1px solid ${T.border}`,borderRadius:11,padding:"11px 14px",color:T.text,fontSize:15}}>
+                {MUSCLE_GROUPS.map(g=><option key={g} value={g}>{g}</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={{fontSize:11,color:T.sub,fontWeight:600,marginBottom:6}}>GRUPO SECUNDARIO (opcional)</div>
+              <select value={newExSecondary} onChange={e=>setNewExSecondary(e.target.value)} style={{width:"100%",background:"#1c1c22",border:`1px solid ${T.border}`,borderRadius:11,padding:"11px 14px",color:T.text,fontSize:15}}>
+                <option value="">Ninguno</option>
+                {MUSCLE_GROUPS.map(g=><option key={g} value={g}>{g}</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={{fontSize:11,color:T.sub,fontWeight:600,marginBottom:8}}>EMOJI</div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                {EMOJIS_EX.map(e=><button key={e} onClick={()=>setNewExEmoji(e)} className="tap" style={{width:40,height:40,fontSize:20,borderRadius:10,cursor:"pointer",background:newExEmoji===e?T.accent+"22":T.surface,border:`1px solid ${newExEmoji===e?T.accent:T.border}`}}>{e}</button>)}
+              </div>
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <Btn T={T} onClick={saveNewExercise} full>✓ Guardar</Btn>
+              <Btn T={T} onClick={()=>setCreatingEx(false)} variant="ghost">✕</Btn>
+            </div>
+          </div>
+        </Card>
+      )}
+
       <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:12,marginBottom:16}}>{groups.map(g=><Chip key={g} T={T} color={T.accent} active={filter===g} onClick={()=>setFilter(g)}>{g}</Chip>)}</div>
       <div className="stagger" style={{display:"flex",flexDirection:"column",gap:10}}>
         {filtered.map(ex=>(
