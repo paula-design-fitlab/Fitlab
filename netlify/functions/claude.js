@@ -5,45 +5,37 @@ exports.handler = async (event) => {
 
   try {
     const body = JSON.parse(event.body);
-    const prompt = body.messages[0].content;
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { 
-            maxOutputTokens: body.max_tokens || 1000,
-            temperature: 0.7
-          }
-        })
-      }
-    );
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": process.env.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01"
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: body.max_tokens || 1000,
+        messages: body.messages
+      })
+    });
 
     const data = await response.json();
-    console.log("Gemini response status:", response.status);
-    console.log("Gemini data:", JSON.stringify(data).substring(0, 500));
+    console.log("Claude status:", response.status);
 
     if (!response.ok) {
-      console.error("Gemini API error:", data);
+      console.error("Claude API error:", JSON.stringify(data));
       return {
         statusCode: 500,
         headers: { "Access-Control-Allow-Origin": "*" },
-        body: JSON.stringify({ error: "Gemini API error: " + JSON.stringify(data) })
+        body: JSON.stringify({ error: JSON.stringify(data) })
       };
     }
-
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    console.log("Extracted text:", text.substring(0, 300));
 
     return {
       statusCode: 200,
       headers: { "Access-Control-Allow-Origin": "*" },
-      body: JSON.stringify({
-        content: [{ type: "text", text }]
-      })
+      body: JSON.stringify(data)
     };
   } catch (err) {
     console.error("Function error:", err.message);
