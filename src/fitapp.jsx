@@ -785,6 +785,7 @@ function RoutinesScreen({profile,profiles,routines,setRoutines,exercises,T}){
     const r=routines.find(x=>x.id===sharingId);
     if(!r){setSharingId(null);return null;}
     const isOwner=r.ownerId===profile.id;
+    const safeSharedWith=Array.isArray(r.sharedWith)?r.sharedWith:[profile.id];
     return(
       <div className="page" style={{padding:"0 16px 100px"}}>
         <div style={{display:"flex",alignItems:"center",gap:12,padding:"20px 0 16px"}}>
@@ -805,7 +806,7 @@ function RoutinesScreen({profile,profiles,routines,setRoutines,exercises,T}){
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
           {profiles.map(p=>{
             const color=ACCENT_OPTIONS[p.accentIdx]?.val||T.accent;
-            const hasAccess=r.sharedWith.includes(p.id);
+            const hasAccess=safeSharedWith.includes(p.id);
             const isCreator=p.id===r.ownerId;
             return(
               <div key={p.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:T.card,border:`1px solid ${hasAccess?color+"44":T.border}`,borderRadius:14,padding:"12px 14px"}}>
@@ -843,11 +844,21 @@ function RoutinesScreen({profile,profiles,routines,setRoutines,exercises,T}){
   const updateRExField=(varId,field,val)=>setEditRExercises(editRExercises.map(e=>e.varId===varId?{...e,[field]:Math.max(0,+val||0)}:e));
   const removeREx=(varId)=>setEditRExercises(editRExercises.filter(e=>e.varId!==varId));
   const addREx=(varId)=>{if(editRExercises.find(e=>e.varId===varId))return;setEditRExercises([...editRExercises,{varId,sets:3,reps:"10",rir:2}]);setPickingREx(false);};
-  const saveRoutineEdit=()=>{
-    if(selected){
-      setRoutines(routines.map(r=>r.id===selected.id?{...r,exercises:editRExercises}:r));
-      setEditingRoutine(false);
-    }
+  const saveRoutineEdit=async()=>{
+    if(!selected) return;
+    setRoutines(routines.map(r=>r.id===selected.id?{...r,exercises:editRExercises}:r));
+    setEditingRoutine(false);
+    try{
+      // Delete old exercises and re-insert
+      await sb.delete("rutina_ejercicios",`rutina_id=eq.${selected.id}`);
+      for(let i=0;i<editRExercises.length;i++){
+        const e=editRExercises[i];
+        await sb.post("rutina_ejercicios",{
+          rutina_id:selected.id, variacion_id:e.varId,
+          orden:i, series:e.sets, reps:String(e.reps), rir:e.rir
+        });
+      }
+    }catch(e){console.error("Error guardando edición rutina:",e);}
   };
 
   if(pickingREx){
@@ -886,9 +897,18 @@ function RoutinesScreen({profile,profiles,routines,setRoutines,exercises,T}){
         <div style={{display:"flex",alignItems:"center",gap:12,padding:"20px 0 16px"}}>
           <BackBtn onClick={()=>{setSelected(null);setEditingRoutine(false);}} T={T}/>
           <div style={{fontFamily:"'Plus Jakarta Sans'",fontSize:20,fontWeight:800,flex:1,color:T.text}}>{r.emoji} {r.name}</div>
-          <div style={{display:"flex",gap:8}}>
-            {isOwner&&!editingRoutine&&<button onClick={()=>{setEditingRoutine(true);setEditRExercises([...r.exercises]);}} className="tap" style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:"7px 12px",color:T.sub,fontSize:12,cursor:"pointer",fontWeight:600}}>✏️ Editar</button>}
+          <div style={{display:"flex",gap:6}}>
+            {isOwner&&!editingRoutine&&<button onClick={()=>{setEditingRoutine(true);setEditRExercises([...r.exercises]);}} className="tap" style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:"7px 12px",color:T.sub,fontSize:12,cursor:"pointer",fontWeight:600}}>✏️</button>}
             {isOwner&&<button onClick={()=>setSharingId(r.id)} className="tap" style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:"7px 12px",color:T.sub,fontSize:12,cursor:"pointer",fontWeight:600}}>👥</button>}
+            {isOwner&&<button onClick={async()=>{
+              if(!window.confirm("¿Eliminar esta rutina?")) return;
+              setRoutines(routines.filter(x=>x.id!==r.id));
+              setSelected(null);
+              try{
+                await sb.delete("rutina_ejercicios",`rutina_id=eq.${r.id}`);
+                await sb.delete("rutinas",`id=eq.${r.id}`);
+              }catch(e){console.error("Error:",e);}
+            }} className="tap" style={{background:"#ff444415",border:"1px solid #ff444430",borderRadius:10,padding:"7px 12px",color:"#ff5555",fontSize:12,cursor:"pointer",fontWeight:600}}>🗑</button>}
           </div>
         </div>
         <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
@@ -1375,8 +1395,9 @@ function CalendarScreen({profile,profiles,sessions,setSessions,routines,exercise
                               <div style={{width:4,height:4,borderRadius:"50%",flexShrink:0,
                                 background:s.status==="done"?T.blue:T.accent}}/>
                               <span style={{fontSize:13,fontWeight:600,color:r?.colorHex||T.text}}>{r?.emoji} {r?.name}</span>
-                              <span style={{fontSize:11,color:T.muted,marginLeft:"auto"}}>
-                                {s.status==="done"?"✓ Hecha":"⏳ Pendiente"}
+                              <span style={{fontSize:11,color:T.muted,marginLeft:"auto",display:"flex",alignItems:"center",gap:4}}>
+                                {s.hora&&<span>{s.hora}</span>}
+                                {s.status==="done"?"✓":"⏳"}
                               </span>
                             </div>
                           );
@@ -1595,13 +1616,17 @@ function WorkoutScreen({session,profile,logs,setLogs,routines,exercises,onFinish
   const[kg,setKg]=useState("");
   const[reps,setReps]=useState("");
   const[feel,setFeel]=useState("Bien");
-  const[editingSet,setEditingSet]=useState(null); // index of set being edited
+  const[editingSet,setEditingSet]=useState(null);
   const[editKg,setEditKg]=useState("");
   const[editReps,setEditReps]=useState("");
   const[viewerSrc,setViewerSrc]=useState(null);
+  const[swappingEx,setSwappingEx]=useState(false);
+  const[swapFilter,setSwapFilter]=useState("Todos");
+  const[swappedVarId,setSwappedVarId]=useState(null);
 
   const curEx=routine?.exercises[step];
-  const curVar=curEx?getVar(curEx.varId,exercises):null;
+  const effectiveVarId=swappedVarId||curEx?.varId;
+  const curVar=curEx?getVar(effectiveVarId,exercises):null;
   const targetSets=curEx?.sets||3;
   const progress=routine?((step+sets.length/targetSets)/routine.exercises.length):0;
 
@@ -1612,7 +1637,7 @@ function WorkoutScreen({session,profile,logs,setLogs,routines,exercises,onFinish
 
   const logSet=()=>{
     if(!kg||!reps)return;
-    const s={id:Date.now(),userId:profile.id,sessionId:session.id,varId:curEx.varId,set:sets.length+1,kg:+kg,reps:+reps,feel};
+    const s={id:Date.now(),userId:profile.id,sessionId:session.id,varId:effectiveVarId,set:sets.length+1,kg:+kg,reps:+reps,feel};
     setSets([...sets,s]);setLogs([...logs,s]);setKg("");setReps("");
     if(sets.length+1>=targetSets&&step+1<routine.exercises.length)
       setTimeout(()=>{setStep(step+1);setSets([]);},400);
@@ -1640,7 +1665,7 @@ function WorkoutScreen({session,profile,logs,setLogs,routines,exercises,onFinish
       </div>
       <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:12,marginBottom:20}}>
         {routine?.exercises.map((e,i)=>{const v=getVar(e.varId,exercises);const done=i<step;const active=i===step;return(
-          <div key={i} onClick={()=>{setStep(i);setSets([]);}} className="tap" style={{flexShrink:0,padding:"8px 14px",borderRadius:12,background:active?T.accent+"22":done?T.blue+"15":T.card,border:`1px solid ${active?T.accent:done?T.blue+"44":T.border}`,color:active?T.accent:done?T.blue:T.sub,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+          <div key={i} onClick={()=>{setStep(i);setSets([]);setSwappedVarId(null);setSwappingEx(false);}} className="tap" style={{flexShrink:0,padding:"8px 14px",borderRadius:12,background:active?T.accent+"22":done?T.blue+"15":T.card,border:`1px solid ${active?T.accent:done?T.blue+"44":T.border}`,color:active?T.accent:done?T.blue:T.sub,fontSize:12,fontWeight:600,cursor:"pointer"}}>
             {done?"✓ ":""}{v?.exercise?.emoji} {v?.exercise?.name}
           </div>
         );})}
@@ -1652,7 +1677,7 @@ function WorkoutScreen({session,profile,logs,setLogs,routines,exercises,onFinish
               style={{width:"100%",height:140,objectFit:"cover",borderRadius:10,marginBottom:12,cursor:"zoom-in"}}/>
           )}
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-            <div>
+            <div style={{flex:1}}>
               <div style={{fontSize:11,color:T.sub,fontWeight:600}}>EJERCICIO {step+1} / {routine.exercises.length}</div>
               <div style={{fontFamily:"'Plus Jakarta Sans'",fontSize:18,fontWeight:800,marginTop:4}}>{curVar.name}</div>
               <div style={{color:T.sub,fontSize:13,marginTop:4}}>Objetivo: {targetSets} series · {curEx.reps} reps · RIR {curEx.rir}</div>
@@ -1660,9 +1685,56 @@ function WorkoutScreen({session,profile,logs,setLogs,routines,exercises,onFinish
                 <span style={{fontSize:11,color:T.blue,fontWeight:700}}>Última vez: {lastWeight}kg × {lastReps} reps</span>
               </div>}
             </div>
-            {(!curVar.photo||curVar.photo.length<4)&&<div style={{fontSize:36}}>{curVar.exercise?.emoji}</div>}
+            <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:8}}>
+              {(!curVar.photo||curVar.photo.length<4)&&<div style={{fontSize:36}}>{curVar.exercise?.emoji}</div>}
+              <button onClick={()=>setSwappingEx(true)} className="tap" style={{
+                background:T.surface,border:`1px solid ${T.border}`,borderRadius:8,
+                padding:"5px 10px",color:T.sub,fontSize:11,cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}>
+                🔄 Cambiar
+              </button>
+            </div>
           </div>
         </Card>
+
+        {swappingEx&&(()=>{
+          const allVars=exercises.flatMap(ex=>ex.variations.map(v=>({...v,exercise:ex})));
+          return(
+            <Card T={T} style={{marginBottom:16,border:`1px solid ${T.accent}44`}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                <div style={{fontSize:13,color:T.accent,fontWeight:700}}>CAMBIAR EJERCICIO</div>
+                <button onClick={()=>{setSwapFilter("Todos");setSwappingEx(false);}} className="tap"
+                  style={{background:"none",border:"none",color:T.muted,fontSize:16,cursor:"pointer"}}>✕</button>
+              </div>
+              <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:8,marginBottom:10}}>
+                {["Todos",...MUSCLE_GROUPS].map(g=><Chip key={g} T={T} color={T.accent} active={swapFilter===g} onClick={()=>setSwapFilter(g)}>{g}</Chip>)}
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:6,maxHeight:280,overflowY:"auto"}}>
+                {allVars.filter(v=>swapFilter==="Todos"||(v.exercise.primary===swapFilter||v.exercise.secondary===swapFilter)).map(v=>(
+                  <div key={v.id} onClick={()=>{
+                    setSets([]);setSwappingEx(false);setSwapFilter("Todos");
+                    // Update the current exercise in the routine (local only)
+                    const newEx=[...routine.exercises];
+                    newEx[step]={...newEx[step],varId:v.id};
+                    // We can't modify routine directly, but we can track the swap
+                    setSwappedVarId(v.id);
+                  }} className="tap" style={{
+                    display:"flex",alignItems:"center",gap:10,padding:"10px 12px",
+                    borderRadius:10,background:v.id===curEx.varId?T.accent+"15":T.surface,
+                    border:`1px solid ${v.id===curEx.varId?T.accent:T.border}`,cursor:"pointer"}}>
+                    {v.photo&&v.photo.length>4
+                      ?<img src={v.photo} alt="" style={{width:40,height:40,objectFit:"cover",borderRadius:8,flexShrink:0}}/>
+                      :<div style={{width:40,height:40,borderRadius:8,background:T.card,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>{v.exercise.emoji}</div>}
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,fontWeight:600,color:T.text}}>{v.name}</div>
+                      <div style={{fontSize:11,color:T.sub,marginTop:1}}>{v.exercise.primary} · {v.material}</div>
+                    </div>
+                    {v.id===curEx.varId&&<span style={{color:T.accent,fontSize:12}}>Actual</span>}
+                  </div>
+                ))}
+              </div>
+            </Card>
+          );
+        })()}
 
         {sets.length>0&&(
           <div style={{marginBottom:16}}>
