@@ -1615,7 +1615,7 @@ function CalendarScreen({profile,profiles,sessions,setSessions,routines,exercise
 }
 
 /* ─── WORKOUT ────────────────────────────────── */
-function WorkoutScreen({session,profile,logs,setLogs,routines,exercises,onFinish,T}){
+function WorkoutScreen({session,profile,logs,setLogs,setLogsState,routines,exercises,onFinish,T}){
   const routine=getRoutine(session.routineId,routines);
   const[step,setStep]=useState(0);
   const[setsPerEx,setSetsPerEx]=useState({}); // {stepIndex: [sets]}
@@ -1643,10 +1643,20 @@ function WorkoutScreen({session,profile,logs,setLogs,routines,exercises,onFinish
   const lastWeight=prevLogs.length>0?prevLogs[prevLogs.length-1].kg:null;
   const lastReps=prevLogs.length>0?prevLogs[prevLogs.length-1].reps:null;
 
-  const logSet=()=>{
+  const logSet=async()=>{
     if(!kg||!reps)return;
     const s={id:Date.now(),userId:profile.id,sessionId:session.id,varId:effectiveVarId,set:sets.length+1,kg:+kg,reps:+reps,feel};
-    setSets([...sets,s]);setLogs([...logs,s]);setKg("");setReps("");
+    setSets([...sets,s]);
+    setLogsState(prev=>[...prev,s]);
+    setKg("");setReps("");
+    // Save directly to Supabase
+    try{
+      await sb.post("registro_series",{
+        sesion_id:s.sessionId, usuario_id:s.userId,
+        variacion_id:s.varId, serie:s.set,
+        peso_kg:s.kg, repeticiones:s.reps, sensacion:s.feel
+      });
+    }catch(e){console.error("Error guardando serie:",e);}
     if(sets.length+1>=targetSets&&step+1<routine.exercises.length)
       setTimeout(()=>{setStep(step+1);},400);
   };
@@ -2722,7 +2732,7 @@ export default function App(){
         <button onClick={()=>setTab("settings")} className="tap" style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:"6px 12px",color:T.sub,fontSize:12,cursor:"pointer",fontWeight:600}}>{liveProfile.emoji} {liveProfile.name}</button>
       </div>
       {activeWorkout?(
-        <WorkoutScreen session={activeWorkout} profile={liveProfile} logs={logs} setLogs={setLogs} routines={routines} exercises={exercises} onFinish={finishWorkout} T={T}/>
+        <WorkoutScreen session={activeWorkout} profile={liveProfile} logs={logs} setLogs={setLogs} setLogsState={setLogsState} routines={routines} exercises={exercises} onFinish={finishWorkout} T={T}/>
       ):(
         <>
           {tab==="home"&&<HomeScreen profile={liveProfile} sessions={sessions} logs={logs} routines={routines} exercises={exercises} onStartWorkout={s=>{setActiveWorkout(s);}} onGoTo={setTab} T={T}/>}
