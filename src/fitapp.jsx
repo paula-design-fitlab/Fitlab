@@ -1618,7 +1618,7 @@ function CalendarScreen({profile,profiles,sessions,setSessions,routines,exercise
 function WorkoutScreen({session,profile,logs,setLogs,routines,exercises,onFinish,T}){
   const routine=getRoutine(session.routineId,routines);
   const[step,setStep]=useState(0);
-  const[sets,setSets]=useState([]);
+  const[setsPerEx,setSetsPerEx]=useState({}); // {stepIndex: [sets]}
   const[kg,setKg]=useState("");
   const[reps,setReps]=useState("");
   const[feel,setFeel]=useState("Bien");
@@ -1629,6 +1629,8 @@ function WorkoutScreen({session,profile,logs,setLogs,routines,exercises,onFinish
   const[swappingEx,setSwappingEx]=useState(false);
   const[swapFilter,setSwapFilter]=useState("Todos");
   const[swappedVarId,setSwappedVarId]=useState(null);
+  const sets=setsPerEx[step]||[];
+  const setSets=(newSets)=>setSetsPerEx(prev=>({...prev,[step]:typeof newSets==="function"?newSets(prev[step]||[]):newSets}));
 
   const curEx=routine?.exercises[step];
   const effectiveVarId=swappedVarId||curEx?.varId;
@@ -1646,7 +1648,7 @@ function WorkoutScreen({session,profile,logs,setLogs,routines,exercises,onFinish
     const s={id:Date.now(),userId:profile.id,sessionId:session.id,varId:effectiveVarId,set:sets.length+1,kg:+kg,reps:+reps,feel};
     setSets([...sets,s]);setLogs([...logs,s]);setKg("");setReps("");
     if(sets.length+1>=targetSets&&step+1<routine.exercises.length)
-      setTimeout(()=>{setStep(step+1);setSets([]);},400);
+      setTimeout(()=>{setStep(step+1);},400);
   };
 
   const saveEditSet=(idx)=>{
@@ -1670,8 +1672,8 @@ function WorkoutScreen({session,profile,logs,setLogs,routines,exercises,onFinish
         <div style={{height:"100%",width:`${progress*100}%`,background:T.accent,borderRadius:999,transition:"width .4s"}}/>
       </div>
       <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:12,marginBottom:20}}>
-        {routine?.exercises.map((e,i)=>{const v=getVar(e.varId,exercises);const done=i<step;const active=i===step;return(
-          <div key={i} onClick={()=>{setStep(i);setSets([]);setSwappedVarId(null);setSwappingEx(false);}} className="tap" style={{flexShrink:0,padding:"8px 14px",borderRadius:12,background:active?T.accent+"22":done?T.blue+"15":T.card,border:`1px solid ${active?T.accent:done?T.blue+"44":T.border}`,color:active?T.accent:done?T.blue:T.sub,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+        {routine?.exercises.map((e,i)=>{const v=getVar(e.varId,exercises);const done=(setsPerEx[i]||[]).length>=(routine?.exercises[i]?.sets||3);const active=i===step;return(
+          <div key={i} onClick={()=>{setStep(i);setSwappedVarId(null);setSwappingEx(false);}} className="tap" style={{flexShrink:0,padding:"8px 14px",borderRadius:12,background:active?T.accent+"22":done?T.blue+"15":T.card,border:`1px solid ${active?T.accent:done?T.blue+"44":T.border}`,color:active?T.accent:done?T.blue:T.sub,fontSize:12,fontWeight:600,cursor:"pointer"}}>
             {done?"✓ ":""}{v?.exercise?.emoji} {v?.exercise?.name}
           </div>
         );})}
@@ -1717,7 +1719,7 @@ function WorkoutScreen({session,profile,logs,setLogs,routines,exercises,onFinish
               <div style={{display:"flex",flexDirection:"column",gap:6,maxHeight:280,overflowY:"auto"}}>
                 {allVars.filter(v=>swapFilter==="Todos"||(v.exercise.primary===swapFilter||v.exercise.secondary===swapFilter)).map(v=>(
                   <div key={v.id} onClick={()=>{
-                    setSets([]);setSwappingEx(false);setSwapFilter("Todos");
+                    setSwappingEx(false);setSwapFilter("Todos");
                     // Update the current exercise in the routine (local only)
                     const newEx=[...routine.exercises];
                     newEx[step]={...newEx[step],varId:v.id};
@@ -1793,7 +1795,7 @@ function WorkoutScreen({session,profile,logs,setLogs,routines,exercises,onFinish
             <div style={{fontSize:32,marginBottom:8}}>💪</div>
             <div style={{fontFamily:"'Plus Jakarta Sans'",fontSize:18,fontWeight:800,marginBottom:4}}>¡Ejercicio completado!</div>
             <div style={{color:T.sub,fontSize:13,marginBottom:16}}>Tómate un descanso</div>
-            <Btn T={T} onClick={()=>{setStep(step+1);setSets([]);}} full>→ Siguiente ejercicio</Btn>
+            <Btn T={T} onClick={()=>{setStep(step+1);}} full>→ Siguiente ejercicio</Btn>
           </Card>
         )}
         {sets.length>=targetSets&&step+1>=(routine?.exercises.length||0)&&(
