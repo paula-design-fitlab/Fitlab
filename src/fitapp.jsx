@@ -608,6 +608,10 @@ function LibraryScreen({exercises,setExercises,T}){
       </div>
     );
   }
+
+
+
+
   if(selected){
     return(
       <div className="page" style={{padding:"0 16px 100px"}}>
@@ -780,7 +784,70 @@ function RoutinesScreen({profile,profiles,routines,setRoutines,exercises,T}){
     setCreating(false);setNewName("");setNewEmoji("💪");setNewColor("#c8f060");setNewExercises([]);
   };
 
-  // ── View: sharing panel ──
+  // ── View: sharing panel ─
+
+  // ── View: routine detail ──
+  const[editingRoutine,setEditingRoutine]=useState(false);
+  const[editRExercises,setEditRExercises]=useState([]);
+  const[pickingREx,setPickingREx]=useState(false);
+  const[editRExFilter,setEditRExFilter]=useState("Todos");
+
+  const moveREx=(varId,dir)=>{
+    const idx=editRExercises.findIndex(e=>e.varId===varId);
+    if(idx===-1)return;const ni=idx+dir;
+    if(ni<0||ni>=editRExercises.length)return;
+    const arr=[...editRExercises];const tmp=arr[idx];arr[idx]=arr[ni];arr[ni]=tmp;
+    setEditRExercises(arr);
+  };
+  const updateRExField=(varId,field,val)=>setEditRExercises(editRExercises.map(e=>e.varId===varId?{...e,[field]:Math.max(0,+val||0)}:e));
+  const removeREx=(varId)=>setEditRExercises(editRExercises.filter(e=>e.varId!==varId));
+  const addREx=(varId)=>{if(editRExercises.find(e=>e.varId===varId))return;setEditRExercises([...editRExercises,{varId,sets:3,reps:"10",rir:2}]);setPickingREx(false);};
+  const saveRoutineEdit=async()=>{
+    if(!selected) return;
+    setRoutines(routines.map(r=>r.id===selected.id?{...r,exercises:editRExercises}:r));
+    setEditingRoutine(false);
+    try{
+      // Delete old exercises and re-insert
+      await sb.delete("rutina_ejercicios",`rutina_id=eq.${selected.id}`);
+      for(let i=0;i<editRExercises.length;i++){
+        const e=editRExercises[i];
+        await sb.post("rutina_ejercicios",{
+          rutina_id:selected.id, variacion_id:e.varId,
+          orden:i, series:e.sets, reps:String(e.reps), rir:e.rir
+        });
+      }
+    }catch(e){console.error("Error guardando edición rutina:",e);}
+  };
+
+
+  if(pickingREx){
+    const allVars=exercises.flatMap(ex=>ex.variations.map(v=>({...v,exercise:ex})));
+    const filteredVars=editRExFilter==="Todos"?allVars:allVars.filter(v=>v.exercise.primary===editRExFilter||v.exercise.secondary===editRExFilter);
+    return(
+      <div className="page" style={{padding:"0 16px 100px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:12,padding:"20px 0 14px"}}>
+          <BackBtn onClick={()=>setPickingREx(false)} T={T}/>
+          <div style={{fontFamily:"'Plus Jakarta Sans'",fontSize:18,fontWeight:800,color:T.text}}>Añadir ejercicio</div>
+        </div>
+        <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:12,marginBottom:14}}>
+          {["Todos",...MUSCLE_GROUPS].map(g=><Chip key={g} T={T} color={T.accent} active={editRExFilter===g} onClick={()=>setEditRExFilter(g)}>{g}</Chip>)}
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {filteredVars.map(v=>{const already=!!editRExercises.find(e=>e.varId===v.id);return(
+            <div key={v.id} onClick={()=>!already&&addREx(v.id)} className="tap"
+              style={{display:"flex",alignItems:"center",gap:12,background:already?T.accent+"15":T.card,
+                border:`1px solid ${already?T.accent+"55":T.border}`,borderRadius:14,padding:"12px 14px",cursor:already?"default":"pointer"}}>
+              {v.photo&&v.photo.length>0?<img src={v.photo} alt="" style={{width:44,height:44,objectFit:"cover",borderRadius:10,flexShrink:0}}/>:
+              <div style={{width:44,height:44,borderRadius:10,background:T.surface,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>{v.exercise.emoji}</div>}
+              <div style={{flex:1}}><div style={{fontWeight:600,fontSize:14,color:T.text}}>{v.name}</div><div style={{fontSize:12,color:T.sub,marginTop:2}}>{v.exercise.primary} · {v.material}</div></div>
+              <span style={{fontSize:20,color:already?T.accent:T.muted}}>{already?"✓":"+"}</span>
+            </div>
+          );})}
+        </div>
+      </div>
+    );
+  }
+
   if(sharingId!==null){
     const r=routines.find(x=>x.id===sharingId);
     if(!r){setSharingId(null);return null;}
@@ -823,67 +890,6 @@ function RoutinesScreen({profile,profiles,routines,setRoutines,exercises,T}){
               </div>
             );
           })}
-        </div>
-      </div>
-    );
-  }
-
-  // ── View: routine detail ──
-  const[editingRoutine,setEditingRoutine]=useState(false);
-  const[editRExercises,setEditRExercises]=useState([]);
-  const[pickingREx,setPickingREx]=useState(false);
-  const[editRExFilter,setEditRExFilter]=useState("Todos");
-
-  const moveREx=(varId,dir)=>{
-    const idx=editRExercises.findIndex(e=>e.varId===varId);
-    if(idx===-1)return;const ni=idx+dir;
-    if(ni<0||ni>=editRExercises.length)return;
-    const arr=[...editRExercises];const tmp=arr[idx];arr[idx]=arr[ni];arr[ni]=tmp;
-    setEditRExercises(arr);
-  };
-  const updateRExField=(varId,field,val)=>setEditRExercises(editRExercises.map(e=>e.varId===varId?{...e,[field]:Math.max(0,+val||0)}:e));
-  const removeREx=(varId)=>setEditRExercises(editRExercises.filter(e=>e.varId!==varId));
-  const addREx=(varId)=>{if(editRExercises.find(e=>e.varId===varId))return;setEditRExercises([...editRExercises,{varId,sets:3,reps:"10",rir:2}]);setPickingREx(false);};
-  const saveRoutineEdit=async()=>{
-    if(!selected) return;
-    setRoutines(routines.map(r=>r.id===selected.id?{...r,exercises:editRExercises}:r));
-    setEditingRoutine(false);
-    try{
-      // Delete old exercises and re-insert
-      await sb.delete("rutina_ejercicios",`rutina_id=eq.${selected.id}`);
-      for(let i=0;i<editRExercises.length;i++){
-        const e=editRExercises[i];
-        await sb.post("rutina_ejercicios",{
-          rutina_id:selected.id, variacion_id:e.varId,
-          orden:i, series:e.sets, reps:String(e.reps), rir:e.rir
-        });
-      }
-    }catch(e){console.error("Error guardando edición rutina:",e);}
-  };
-
-  if(pickingREx){
-    const allVars=exercises.flatMap(ex=>ex.variations.map(v=>({...v,exercise:ex})));
-    const filteredVars=editRExFilter==="Todos"?allVars:allVars.filter(v=>v.exercise.primary===editRExFilter||v.exercise.secondary===editRExFilter);
-    return(
-      <div className="page" style={{padding:"0 16px 100px"}}>
-        <div style={{display:"flex",alignItems:"center",gap:12,padding:"20px 0 14px"}}>
-          <BackBtn onClick={()=>setPickingREx(false)} T={T}/>
-          <div style={{fontFamily:"'Plus Jakarta Sans'",fontSize:18,fontWeight:800,color:T.text}}>Añadir ejercicio</div>
-        </div>
-        <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:12,marginBottom:14}}>
-          {["Todos",...MUSCLE_GROUPS].map(g=><Chip key={g} T={T} color={T.accent} active={editRExFilter===g} onClick={()=>setEditRExFilter(g)}>{g}</Chip>)}
-        </div>
-        <div style={{display:"flex",flexDirection:"column",gap:8}}>
-          {filteredVars.map(v=>{const already=!!editRExercises.find(e=>e.varId===v.id);return(
-            <div key={v.id} onClick={()=>!already&&addREx(v.id)} className="tap"
-              style={{display:"flex",alignItems:"center",gap:12,background:already?T.accent+"15":T.card,
-                border:`1px solid ${already?T.accent+"55":T.border}`,borderRadius:14,padding:"12px 14px",cursor:already?"default":"pointer"}}>
-              {v.photo&&v.photo.length>0?<img src={v.photo} alt="" style={{width:44,height:44,objectFit:"cover",borderRadius:10,flexShrink:0}}/>:
-              <div style={{width:44,height:44,borderRadius:10,background:T.surface,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>{v.exercise.emoji}</div>}
-              <div style={{flex:1}}><div style={{fontWeight:600,fontSize:14,color:T.text}}>{v.name}</div><div style={{fontSize:12,color:T.sub,marginTop:2}}>{v.exercise.primary} · {v.material}</div></div>
-              <span style={{fontSize:20,color:already?T.accent:T.muted}}>{already?"✓":"+"}</span>
-            </div>
-          );})}
         </div>
       </div>
     );
@@ -1855,8 +1861,8 @@ function ProgressScreen({profile,logs,setLogs,exercises,sessions,T}){
       <div style={{padding:"24px 0 14px"}}><SectionTitle T={T}>PROGRESO</SectionTitle></div>
 
       {/* View tabs */}
-      <div style={{display:"flex",gap:8,marginBottom:20}}>
-        {[["ejercicios","Por ejercicio"],["musculos","Por músculo"],["resumen","Resumen"]].map(([v,l])=>(
+      <div style={{display:"flex",gap:8,marginBottom:20,overflowX:"auto",paddingBottom:4}}>
+        {[["ejercicios","Por ejercicio"],["musculos","Por músculo"],["resumen","Resumen"],["sesiones","Sesiones"]].map(([v,l])=>(
           <Chip key={v} T={T} color={T.accent} active={view===v} onClick={()=>setView(v)}>{l}</Chip>
         ))}
       </div>
@@ -2008,6 +2014,79 @@ function ProgressScreen({profile,logs,setLogs,exercises,sessions,T}){
                     )
                   ))}
                 </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── SESIONES COMPLETADAS ── */}
+      {view==="sesiones"&&(
+        <div>
+          {doneSessions.length===0&&<div style={{textAlign:"center",color:T.sub,marginTop:60}}><div style={{fontSize:48,marginBottom:12}}>📋</div><div>Sin sesiones completadas aún</div></div>}
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            {doneSessions.sort((a,b)=>b.date.localeCompare(a.date)).map(s=>{
+              const r=sessions&&routines?routines.find(x=>x.id===s.routineId):null;
+              const sLogs=myLogs.filter(l=>l.sessionId===s.id);
+              const byVar=sLogs.reduce((acc,l)=>{(acc[l.varId]=acc[l.varId]||[]).push(l);return acc;},{});
+              return(
+                <Card key={s.id} T={T}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:sLogs.length>0?12:0}}>
+                    <div>
+                      <div style={{fontSize:22,marginBottom:4}}>{r?.emoji||"💪"}</div>
+                      <div style={{fontWeight:700,fontSize:15,color:T.text}}>{r?.name||"Sesión"}</div>
+                      <div style={{fontSize:12,color:T.sub,marginTop:2}}>{s.date}{s.hora?" · "+s.hora:""}</div>
+                      {s.objetivo&&<div style={{fontSize:11,color:T.accent,marginTop:3}}>{OBJETIVO_ICONS[s.objetivo]} {s.objetivo}</div>}
+                    </div>
+                    <Badge color={T.blue} T={T}>{sLogs.length} series</Badge>
+                  </div>
+                  {sLogs.length>0&&(
+                    <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                      {Object.entries(byVar).map(([varId,varLogs])=>{
+                        const v=getVar(varId,exercises);
+                        return(
+                          <div key={varId} style={{background:T.surface,borderRadius:10,padding:"10px 12px"}}>
+                            <div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:6}}>{v?.name||varId}</div>
+                            {varLogs.sort((a,b)=>a.set-b.set).map(l=>(
+                              editingLog===l.id?(
+                                <div key={l.id} style={{marginBottom:6}}>
+                                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:6}}>
+                                    <Input T={T} label="Kg" value={editLogKg} onChange={setEditLogKg} type="number"/>
+                                    <Input T={T} label="Reps" value={editLogReps} onChange={setEditLogReps} type="number"/>
+                                  </div>
+                                  <div style={{display:"flex",gap:6}}>
+                                    <Btn T={T} onClick={async()=>{
+                                      setLogs(logs.map(x=>x.id===l.id?{...x,kg:+editLogKg,reps:+editLogReps}:x));
+                                      setEditingLog(null);
+                                      try{ await sb.patch("registro_series",`id=eq.${l.id}`,{peso_kg:+editLogKg,repeticiones:+editLogReps}); }
+                                      catch(e){ console.error(e); }
+                                    }} full style={{fontSize:11,padding:"7px"}}>✓ Guardar</Btn>
+                                    <Btn T={T} onClick={()=>setEditingLog(null)} variant="ghost" style={{fontSize:11,padding:"7px"}}>✕</Btn>
+                                  </div>
+                                </div>
+                              ):(
+                                <div key={l.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                                  <span style={{fontSize:11,color:T.muted}}>Serie {l.set}</span>
+                                  <span style={{fontSize:12}}>{l.kg}kg × {l.reps} reps</span>
+                                  <div style={{display:"flex",gap:4}}>
+                                    <button onClick={()=>{setEditingLog(l.id);setEditLogKg(String(l.kg));setEditLogReps(String(l.reps));}} className="tap"
+                                      style={{background:"none",border:`1px solid ${T.border}`,borderRadius:5,padding:"1px 6px",color:T.sub,fontSize:10,cursor:"pointer"}}>✏️</button>
+                                    <button onClick={async()=>{
+                                      setLogs(logs.filter(x=>x.id!==l.id));
+                                      try{ await sb.delete("registro_series",`id=eq.${l.id}`); }
+                                      catch(e){ console.error(e); }
+                                    }} className="tap"
+                                      style={{background:"#ff444415",border:"1px solid #ff444430",borderRadius:5,padding:"1px 6px",color:"#ff5555",fontSize:10,cursor:"pointer"}}>🗑</button>
+                                  </div>
+                                </div>
+                              )
+                            ))}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </Card>
               );
             })}
           </div>
@@ -2349,6 +2428,99 @@ Responde SOLO con este JSON:
 }
 
 
+/* ─── REVIEW SESSION SCREEN ─────────────────── */
+function ReviewSessionScreen({session,profile,logs,setLogs,routines,exercises,onClose,T}){
+  const routine=getRoutine(session.routineId,routines);
+  const sessionLogs=logs.filter(l=>l.sessionId===session.id&&l.userId===profile.id);
+  const[editingLog,setEditingLog]=useState(null);
+  const[editKg,setEditKg]=useState("");
+  const[editReps,setEditReps]=useState("");
+
+  // Group logs by varId
+  const byVar=sessionLogs.reduce((acc,l)=>{(acc[l.varId]=acc[l.varId]||[]).push(l);return acc;},{});
+
+  return(
+    <div className="page" style={{padding:"0 16px 100px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:12,padding:"20px 0 16px"}}>
+        <BackBtn onClick={onClose} T={T}/>
+        <div style={{flex:1}}>
+          <div style={{fontSize:11,color:T.sub,fontWeight:600}}>SESIÓN COMPLETADA</div>
+          <div style={{fontFamily:"'Plus Jakarta Sans'",fontSize:18,fontWeight:800,color:T.text}}>{routine?.emoji} {routine?.name}</div>
+          <div style={{fontSize:12,color:T.sub,marginTop:2}}>{session.date}{session.hora?" · "+session.hora:""}</div>
+        </div>
+      </div>
+
+      {Object.entries(byVar).length===0&&(
+        <div style={{textAlign:"center",color:T.sub,marginTop:40}}>
+          <div style={{fontSize:48,marginBottom:12}}>📋</div>
+          <div>No hay series registradas en esta sesión</div>
+        </div>
+      )}
+
+      <div style={{display:"flex",flexDirection:"column",gap:14}}>
+        {Object.entries(byVar).map(([varId,varLogs])=>{
+          const v=getVar(varId,exercises);
+          const sorted=[...varLogs].sort((a,b)=>a.set-b.set);
+          const maxKg=Math.max(...sorted.map(l=>+l.kg||0));
+          return(
+            <Card key={varId} T={T} style={{borderLeft:`3px solid ${routine?.colorHex||T.accent}`}}>
+              {v&&v.photo&&v.photo.length>4&&(
+                <img src={v.photo} alt="" style={{width:"100%",height:80,objectFit:"cover",borderRadius:10,marginBottom:10}}/>
+              )}
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+                <div>
+                  <div style={{fontSize:11,color:T.sub,fontWeight:600}}>{v?.exercise?.name||""}</div>
+                  <div style={{fontWeight:700,fontSize:15,color:T.text}}>{v?.name||varId}</div>
+                </div>
+                <Badge color={T.accent} T={T}>{maxKg} kg máx</Badge>
+              </div>
+              {sorted.map(l=>(
+                editingLog===l.id?(
+                  <div key={l.id} style={{background:T.surface,borderRadius:10,padding:"10px 12px",marginBottom:6}}>
+                    <div style={{fontSize:11,color:T.accent,fontWeight:700,marginBottom:8}}>Editando serie {l.set}</div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+                      <Input T={T} label="Kilos" value={editKg} onChange={setEditKg} type="number"/>
+                      <Input T={T} label="Reps" value={editReps} onChange={setEditReps} type="number"/>
+                    </div>
+                    <div style={{display:"flex",gap:8}}>
+                      <Btn T={T} onClick={async()=>{
+                        setLogs(logs.map(x=>x.id===l.id?{...x,kg:+editKg,reps:+editReps}:x));
+                        setEditingLog(null);
+                        try{ await sb.patch("registro_series",`id=eq.${l.id}`,{peso_kg:+editKg,repeticiones:+editReps}); }
+                        catch(e){ console.error(e); }
+                      }} full style={{fontSize:12,padding:"9px"}}>✓ Guardar</Btn>
+                      <Btn T={T} onClick={()=>setEditingLog(null)} variant="ghost" style={{fontSize:12,padding:"9px"}}>✕</Btn>
+                    </div>
+                  </div>
+                ):(
+                  <div key={l.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+                    background:T.surface,borderRadius:8,padding:"8px 10px",marginBottom:4}}>
+                    <span style={{fontSize:12,color:T.sub,fontWeight:600}}>Serie {l.set}</span>
+                    <span style={{fontSize:14,fontWeight:600}}>{l.kg} kg × {l.reps} reps</span>
+                    <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                      <Badge color={T.blue} T={T} style={{fontSize:10}}>{l.feel}</Badge>
+                      <button onClick={()=>{setEditingLog(l.id);setEditKg(String(l.kg));setEditReps(String(l.reps));}}
+                        className="tap" style={{background:"none",border:`1px solid ${T.border}`,borderRadius:6,
+                          padding:"2px 7px",color:T.sub,fontSize:11,cursor:"pointer"}}>✏️</button>
+                      <button onClick={async()=>{
+                        setLogs(logs.filter(x=>x.id!==l.id));
+                        try{ await sb.delete("registro_series",`id=eq.${l.id}`); }
+                        catch(e){ console.error(e); }
+                      }} className="tap" style={{background:"#ff444415",border:"1px solid #ff444430",
+                        borderRadius:6,padding:"2px 7px",color:"#ff5555",fontSize:11,cursor:"pointer"}}>🗑</button>
+                    </div>
+                  </div>
+                )
+              ))}
+            </Card>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+
 /* ─── APP ROOT ───────────────────────────────── */
 export default function App(){
   const[profiles,setProfilesState]=useState([]);
@@ -2356,6 +2528,7 @@ export default function App(){
   const[profile,setProfile]=useState(null);
   const[tab,setTab]=useState("home");
   const[activeWorkout,setActiveWorkout]=useState(null);
+  const[reviewingSession,setReviewingSession]=useState(null);
   const[sessions,setSessionsState]=useState([]);
   const[logs,setLogsState]=useState([]);
   const[exercises,setExercises]=useState(EXERCISES_INIT);
@@ -2493,11 +2666,22 @@ export default function App(){
     if(!Array.isArray(newLogs)) return;
     const added = newLogs.find(l => !logs.find(x=>x.id===l.id));
     if(added) {
-      await sb.post("registro_series",{
-        sesion_id:added.sessionId, usuario_id:added.userId,
-        variacion_id:added.varId, serie:added.set,
-        peso_kg:added.kg, repeticiones:added.reps, sensacion:added.feel
-      });
+      // Don't save if sessionId is a temp timestamp id (not yet in DB)
+      const sessionInDB = sessions.find(s=>s.id===added.sessionId&&Number(s.id)<1000000000000);
+      if(!sessionInDB) {
+        console.warn("Session not in DB yet, skipping log save for now");
+        return;
+      }
+      try {
+        const res = await sb.post("registro_series",{
+          sesion_id:added.sessionId, usuario_id:added.userId,
+          variacion_id:added.varId, serie:added.set,
+          peso_kg:added.kg, repeticiones:added.reps, sensacion:added.feel
+        });
+        console.log("Log saved:", res);
+      } catch(e) {
+        console.error("Error saving log:", e);
+      }
     }
   };
 
