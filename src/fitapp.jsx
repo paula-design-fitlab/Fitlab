@@ -48,15 +48,17 @@ const exerciseFromDB = (exs, vars) => exs.map(e => ({
 const routineFromDB = (ruts, rexs) => ruts.map(r => ({
   id: r.id, ownerId: r.owner_id, sharedWith: r.shared_with||[],
   name: r.nombre, emoji: r.emoji||"💪", colorHex: r.color_hex||"#c8f060",
+  archived: r.archivada||false,
   exercises: rexs.filter(re=>re.rutina_id===r.id)
     .sort((a,b)=>a.orden-b.orden)
     .map(re=>({varId:re.variacion_id, sets:re.series, reps:re.reps, rir:re.rir}))
 }));
 
 const sessionFromDB = s => ({
-  id: s.id, userId: s.usuario_id, routineId: s.rutina_id,
-  date: s.fecha, status: s.estado||"pending", objetivo: s.objetivo||"",
-  sharedWith: s.shared_with||[s.usuario_id]
+  id: s.id, userId: s.usuario_id, routineId: s.es_libre?"free":s.rutina_id,
+  date: s.fecha, hora: s.hora||null, status: s.estado||"pending", objetivo: s.objetivo||"",
+  sharedWith: s.shared_with||[s.usuario_id],
+  groupId: s.group_id||null, groupParticipants: s.group_participants||null
 });
 
 const logFromDB = l => ({
@@ -748,7 +750,7 @@ function RoutinesScreen({profile,profiles,routines,setRoutines,exercises,T}){
   const[exFilter,setExFilter]=useState("Todos");
 
   // ── Derived data ──
-  const myRoutines=routines.filter(r=>r.sharedWith&&r.sharedWith.includes(profile.id));
+  const myRoutines=routines.filter(r=>r.sharedWith&&r.sharedWith.includes(profile.id)&&!r.archived);
   const EMOJIS_R=["💪","🍑","🦵","🏋️","🔥","⚡","🏃","🧘","🥊","🎯","💥","🌟"];
   const COLOR_OPTS=["#c8f060","#ff6eb4","#ff3e3e","#40d9f0","#b06cff","#ffaa30","#ff7055","#4ade80"];
 
@@ -907,12 +909,11 @@ function RoutinesScreen({profile,profiles,routines,setRoutines,exercises,T}){
             {isOwner&&!editingRoutine&&<button onClick={()=>{setEditingRoutine(true);setEditRExercises([...r.exercises]);}} className="tap" style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:"7px 12px",color:T.sub,fontSize:12,cursor:"pointer",fontWeight:600}}>✏️</button>}
             {isOwner&&<button onClick={()=>setSharingId(r.id)} className="tap" style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:"7px 12px",color:T.sub,fontSize:12,cursor:"pointer",fontWeight:600}}>👥</button>}
             {isOwner&&<button onClick={async()=>{
-              if(!window.confirm("¿Eliminar esta rutina?")) return;
-              setRoutines(routines.filter(x=>x.id!==r.id));
+              if(!window.confirm("¿Eliminar esta rutina? Las sesiones ya realizadas con ella seguirán siendo accesibles.")) return;
+              setRoutines(routines.map(x=>x.id===r.id?{...x,archived:true}:x));
               setSelected(null);
               try{
-                await sb.delete("rutina_ejercicios",`rutina_id=eq.${r.id}`);
-                await sb.delete("rutinas",`id=eq.${r.id}`);
+                await sb.patch("rutinas",`id=eq.${r.id}`,{archivada:true});
               }catch(e){console.error("Error:",e);}
             }} className="tap" style={{background:"#ff444415",border:"1px solid #ff444430",borderRadius:10,padding:"7px 12px",color:"#ff5555",fontSize:12,cursor:"pointer",fontWeight:600}}>🗑</button>}
           </div>
@@ -1135,7 +1136,7 @@ function CalendarScreen({profile,profiles,sessions,setSessions,routines,exercise
   const[showAdd,setShowAdd]=useState(false);
   const[newDate,setNewDate]=useState(todayStr());
   const[newRoutine,setNewRoutine]=useState(routines[0]?.id||1);
-  const myRoutines=routines.filter(r=>r.sharedWith&&r.sharedWith.includes(profile.id));
+  const myRoutines=routines.filter(r=>r.sharedWith&&r.sharedWith.includes(profile.id)&&!r.archived);
   const mySessions=sessions.filter(s=>s.userId===profile.id);
   const hasSessions=date=>mySessions.filter(s=>s.date===date);
   const[newObjetivo,setNewObjetivo]=useState("Hipertrofia");
@@ -1151,7 +1152,7 @@ function CalendarScreen({profile,profiles,sessions,setSessions,routines,exercise
     participants.forEach((uid,i)=>{
       newSess.push({
         id:groupId+i, userId:uid, date:newDate, hora:newHora,
-        routineId:+newRoutine, status:"pending",
+        routineId:newRoutine==="free"?"free":+newRoutine, status:"pending",
         objetivo:newObjetivo,
         groupId:participants.length>1?groupId:null,
         groupParticipants:participants.length>1?participants:null
@@ -1189,7 +1190,9 @@ function CalendarScreen({profile,profiles,sessions,setSessions,routines,exercise
     setEditingSession(null);
   };
 
-  const renderSessionCard=(s)=>{const r=getRoutine(s.routineId,routines);
+  const renderSessionCard=(s)=>{
+    const isFree=s.routineId==="free";
+    const r=isFree?{emoji:"🎲",name:"Rutina libre",colorHex:T.accent,exercises:[]}:getRoutine(s.routineId,routines);
     const groupMembers=s.groupParticipants?s.groupParticipants.map(uid=>profiles&&profiles.find(p=>p.id===uid)).filter(Boolean):[];
     const isEditing=editingSession===s.id;
     return(
@@ -1546,6 +1549,7 @@ function CalendarScreen({profile,profiles,sessions,setSessions,routines,exercise
             <div>
               <div style={{fontSize:11,color:T.sub,fontWeight:600,marginBottom:6}}>RUTINA</div>
               <select value={newRoutine} onChange={e=>setNewRoutine(e.target.value)} style={{width:"100%",background:"#1c1c22",border:`1px solid ${T.border}`,borderRadius:11,padding:"11px 14px",color:T.text,fontSize:15}}>
+                <option value="free">🎲 Rutina libre (elegir sobre la marcha)</option>
                 {myRoutines.map(r=><option key={r.id} value={r.id}>{r.emoji} {r.name}</option>)}
               </select>
             </div>
@@ -1610,6 +1614,189 @@ function CalendarScreen({profile,profiles,sessions,setSessions,routines,exercise
       {view==="day"&&renderDay()}
       {view==="week"&&renderWeek()}
       {view==="month"&&renderMonth()}
+    </div>
+  );
+}
+
+
+/* ─── FREE WORKOUT (Rutina libre) ────────────── */
+function FreeWorkoutScreen({session,profile,logs,setLogsState,exercises,routines,setRoutines,onFinish,T}){
+  const[exList,setExList]=useState([]); // [{varId, sets:[{kg,reps,feel}]}]
+  const[picking,setPicking]=useState(exList.length===0);
+  const[pickFilter,setPickFilter]=useState("Todos");
+  const[activeIdx,setActiveIdx]=useState(null);
+  const[kg,setKg]=useState("");
+  const[reps,setReps]=useState("");
+  const[feel,setFeel]=useState("Bien");
+  const[viewerSrc,setViewerSrc]=useState(null);
+  const[showSaveDialog,setShowSaveDialog]=useState(false);
+  const[saveRoutineName,setSaveRoutineName]=useState("");
+  const[saveRoutineEmoji,setSaveRoutineEmoji]=useState("🎲");
+
+  const allVars=exercises.flatMap(ex=>ex.variations.map(v=>({...v,exercise:ex})));
+  const filteredVars=pickFilter==="Todos"?allVars:allVars.filter(v=>v.exercise.primary===pickFilter||v.exercise.secondary===pickFilter);
+
+  const addExercise=(varId)=>{
+    if(exList.find(e=>e.varId===varId)){setPicking(false);setActiveIdx(exList.findIndex(e=>e.varId===varId));return;}
+    const newList=[...exList,{varId,sets:[]}];
+    setExList(newList);
+    setActiveIdx(newList.length-1);
+    setPicking(false);
+  };
+
+  const logSet=async()=>{
+    if(!kg||!reps||activeIdx===null) return;
+    const s={kg:+kg,reps:+reps,feel,id:Date.now()};
+    const newList=[...exList];
+    newList[activeIdx]={...newList[activeIdx],sets:[...newList[activeIdx].sets,s]};
+    setExList(newList);
+    setKg("");setReps("");
+    try{
+      const res=await sb.post("registro_series",{
+        sesion_id:session.id,usuario_id:profile.id,variacion_id:newList[activeIdx].varId,
+        serie:newList[activeIdx].sets.length,peso_kg:s.kg,repeticiones:s.reps,sensacion:s.feel
+      });
+      setLogsState(prev=>[...prev,{id:s.id,userId:profile.id,sessionId:session.id,varId:newList[activeIdx].varId,set:newList[activeIdx].sets.length,kg:s.kg,reps:s.reps,feel:s.feel}]);
+    }catch(e){console.error("Error guardando serie:",e);}
+  };
+
+  const totalSets=exList.reduce((a,e)=>a+e.sets.length,0);
+
+  const confirmFinish=()=>{
+    if(exList.length>0) setShowSaveDialog(true);
+    else onFinish();
+  };
+
+  const saveAsRoutine=async()=>{
+    if(!saveRoutineName.trim()) { onFinish(); return; }
+    const r={
+      id:Date.now(),ownerId:profile.id,sharedWith:[profile.id],
+      name:saveRoutineName.trim(),emoji:saveRoutineEmoji,colorHex:"#c8f060",
+      exercises:exList.map(e=>({varId:e.varId,sets:e.sets.length||3,reps:"10",rir:2}))
+    };
+    setRoutines([...routines,r]);
+    try{
+      const res=await sb.post("rutinas",{owner_id:r.ownerId,shared_with:r.sharedWith,nombre:r.name,emoji:r.emoji,color_hex:r.colorHex});
+      if(res&&res[0]){
+        const newId=res[0].id;
+        for(let i=0;i<r.exercises.length;i++){
+          const e=r.exercises[i];
+          await sb.post("rutina_ejercicios",{rutina_id:newId,variacion_id:e.varId,orden:i,series:e.sets,reps:e.reps,rir:e.rir});
+        }
+      }
+    }catch(e){console.error("Error guardando rutina:",e);}
+    onFinish();
+  };
+
+  if(picking){
+    return(
+      <div className="page" style={{padding:"0 16px 100px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:12,padding:"20px 0 16px"}}>
+          {exList.length>0&&<BackBtn onClick={()=>setPicking(false)} T={T}/>}
+          <div style={{flex:1}}>
+            <div style={{fontSize:11,color:T.sub,fontWeight:600}}>RUTINA LIBRE</div>
+            <div style={{fontFamily:"'Plus Jakarta Sans'",fontSize:18,fontWeight:800,color:T.text}}>Elige un ejercicio</div>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:12,marginBottom:14}}>
+          {["Todos",...MUSCLE_GROUPS].map(g=><Chip key={g} T={T} color={T.accent} active={pickFilter===g} onClick={()=>setPickFilter(g)}>{g}</Chip>)}
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {filteredVars.map(v=>{
+            const already=exList.find(e=>e.varId===v.id);
+            return(
+              <div key={v.id} onClick={()=>addExercise(v.id)} className="tap" style={{
+                display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderRadius:14,
+                background:already?T.accent+"15":T.card,border:`1px solid ${already?T.accent+"55":T.border}`,cursor:"pointer"}}>
+                {v.photo&&v.photo.length>4?<img src={v.photo} alt="" style={{width:44,height:44,objectFit:"cover",borderRadius:10,flexShrink:0}}/>:
+                <div style={{width:44,height:44,borderRadius:10,background:T.surface,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>{v.exercise.emoji}</div>}
+                <div style={{flex:1}}><div style={{fontWeight:600,fontSize:14,color:T.text}}>{v.name}</div><div style={{fontSize:12,color:T.sub,marginTop:2}}>{v.exercise.primary} · {v.material}</div></div>
+                {already&&<span style={{color:T.accent,fontSize:18}}>✓</span>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  if(showSaveDialog){
+    return(
+      <div className="page" style={{padding:"0 16px 100px"}}>
+        <div style={{padding:"24px 0 16px"}}>
+          <div style={{fontSize:40,marginBottom:10,textAlign:"center"}}>💾</div>
+          <div style={{fontFamily:"'Plus Jakarta Sans'",fontSize:20,fontWeight:800,textAlign:"center",marginBottom:6}}>¿Guardar como rutina?</div>
+          <div style={{fontSize:13,color:T.sub,textAlign:"center"}}>Podrás reutilizarla más adelante</div>
+        </div>
+        <Card T={T} style={{marginBottom:16}}>
+          <Input T={T} label="Nombre de la rutina" value={saveRoutineName} onChange={setSaveRoutineName} placeholder="Ej: Pierna improvisada"/>
+        </Card>
+        <Btn T={T} onClick={saveAsRoutine} full style={{marginBottom:10}}>✓ Guardar y terminar</Btn>
+        <Btn T={T} onClick={onFinish} variant="ghost" full>No guardar, solo terminar</Btn>
+      </div>
+    );
+  }
+
+  const active=exList[activeIdx];
+  const v=active?getVar(active.varId,exercises):null;
+  const lastWeight=active?(()=>{const pl=logs.filter(l=>l.userId===profile.id&&l.varId===active.varId&&l.sessionId!==session.id);return pl.length>0?pl[pl.length-1].kg:null;})():null;
+
+  return(
+    <div className="page" style={{padding:"0 16px 100px"}}>
+      {viewerSrc&&<ImageViewer src={viewerSrc} onClose={()=>setViewerSrc(null)}/>}
+      <div style={{padding:"20px 0 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div><div style={{fontSize:11,color:T.sub,fontWeight:600}}>RUTINA LIBRE</div><div style={{fontFamily:"'Plus Jakarta Sans'",fontSize:20,fontWeight:800}}>{totalSets} series · {exList.length} ejercicios</div></div>
+        <Btn T={T} onClick={confirmFinish} variant="ghost" style={{fontSize:13,padding:"9px 14px"}}>Terminar</Btn>
+      </div>
+
+      <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:12,marginBottom:16}}>
+        {exList.map((e,i)=>{const ev=getVar(e.varId,exercises);return(
+          <div key={i} onClick={()=>setActiveIdx(i)} className="tap" style={{flexShrink:0,padding:"8px 14px",borderRadius:12,
+            background:i===activeIdx?T.accent+"22":T.card,border:`1px solid ${i===activeIdx?T.accent:T.border}`,
+            color:i===activeIdx?T.accent:T.sub,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+            {ev?.exercise?.emoji} {ev?.name} ({e.sets.length})
+          </div>
+        );})}
+        <button onClick={()=>setPicking(true)} className="tap" style={{flexShrink:0,padding:"8px 14px",borderRadius:12,
+          background:T.accent,border:"none",color:"#000",fontSize:12,fontWeight:700,cursor:"pointer"}}>+ Añadir</button>
+      </div>
+
+      {active&&v&&(<>
+        <Card T={T} accent={T.accent} style={{marginBottom:16}}>
+          {v.photo&&v.photo.length>4&&<img src={v.photo} alt="" onClick={()=>setViewerSrc(v.photo)} style={{width:"100%",height:140,objectFit:"cover",borderRadius:10,marginBottom:12,cursor:"zoom-in"}}/>}
+          <div style={{fontFamily:"'Plus Jakarta Sans'",fontSize:18,fontWeight:800}}>{v.name}</div>
+          <div style={{color:T.sub,fontSize:13,marginTop:4}}>{v.exercise?.primary}</div>
+          {lastWeight&&<div style={{marginTop:8,background:T.blue+"15",border:`1px solid ${T.blue}33`,borderRadius:8,padding:"5px 10px",display:"inline-block"}}>
+            <span style={{fontSize:11,color:T.blue,fontWeight:700}}>Última vez: {lastWeight}kg</span>
+          </div>}
+        </Card>
+
+        {active.sets.length>0&&(
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:11,color:T.sub,fontWeight:600,marginBottom:8}}>SERIES</div>
+            {active.sets.map((s,i)=>(
+              <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:"10px 14px",marginBottom:6}}>
+                <span style={{color:T.blue,fontWeight:700,fontSize:13}}>Serie {i+1}</span>
+                <span style={{fontSize:14}}>{s.kg} kg · {s.reps} reps</span>
+                <Badge color={T.blue} T={T}>{s.feel}</Badge>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <Card T={T}>
+          <div style={{fontSize:13,color:T.sub,fontWeight:600,marginBottom:12}}>SERIE {active.sets.length+1}</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+            <Input T={T} label="Kilos" value={kg} onChange={setKg} type="number" placeholder={lastWeight?String(lastWeight):"0"}/>
+            <Input T={T} label="Reps" value={reps} onChange={setReps} type="number" placeholder="0"/>
+          </div>
+          <div style={{fontSize:11,color:T.sub,fontWeight:600,marginBottom:8}}>SENSACIÓN</div>
+          <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
+            {FEELS.map(f=><Chip key={f} T={T} color={T.accent} active={feel===f} onClick={()=>setFeel(f)}>{f}</Chip>)}
+          </div>
+          <Btn T={T} onClick={logSet} full>✓ Registrar serie</Btn>
+        </Card>
+      </>)}
     </div>
   );
 }
@@ -2636,8 +2823,9 @@ export default function App(){
     if(addedList.length>0) {
       for(const added of addedList){
         await sb.post("sesiones",{
-          usuario_id:added.userId, rutina_id:added.routineId,
+          usuario_id:added.userId, rutina_id:added.routineId==="free"?null:added.routineId,
           fecha:added.date, estado:added.status, objetivo:added.objetivo||"",
+          es_libre:added.routineId==="free",
           group_id:added.groupId||null,
           group_participants:added.groupParticipants||null
         });
@@ -2667,7 +2855,8 @@ export default function App(){
       return old && (old.date!==s.date || old.routineId!==s.routineId || old.objetivo!==s.objetivo);
     });
     if(edited) await sb.patch("sesiones",`id=eq.${edited.id}`,{
-      fecha:edited.date, rutina_id:edited.routineId, objetivo:edited.objetivo||"",
+      fecha:edited.date, rutina_id:edited.routineId==="free"?null:edited.routineId,
+      objetivo:edited.objetivo||"", es_libre:edited.routineId==="free",
       group_id:edited.groupId||null, group_participants:edited.groupParticipants||null
     });
   };
@@ -2732,7 +2921,9 @@ export default function App(){
         <button onClick={()=>setTab("settings")} className="tap" style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:"6px 12px",color:T.sub,fontSize:12,cursor:"pointer",fontWeight:600}}>{liveProfile.emoji} {liveProfile.name}</button>
       </div>
       {activeWorkout?(
-        <WorkoutScreen session={activeWorkout} profile={liveProfile} logs={logs} setLogs={setLogs} setLogsState={setLogsState} routines={routines} exercises={exercises} onFinish={finishWorkout} T={T}/>
+        activeWorkout.routineId==="free"
+          ?<FreeWorkoutScreen session={activeWorkout} profile={liveProfile} logs={logs} setLogsState={setLogsState} exercises={exercises} routines={routines} setRoutines={setRoutines} onFinish={finishWorkout} T={T}/>
+          :<WorkoutScreen session={activeWorkout} profile={liveProfile} logs={logs} setLogs={setLogs} setLogsState={setLogsState} routines={routines} exercises={exercises} onFinish={finishWorkout} T={T}/>
       ):(
         <>
           {tab==="home"&&<HomeScreen profile={liveProfile} sessions={sessions} logs={logs} routines={routines} exercises={exercises} onStartWorkout={s=>{setActiveWorkout(s);}} onGoTo={setTab} T={T}/>}
