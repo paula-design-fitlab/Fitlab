@@ -595,9 +595,22 @@ function LibraryScreen({exercises,setExercises,T}){
           {selVar.video&&selVar.video.length>0&&(
             <div style={{marginBottom:12}}>
               <div style={{fontSize:11,color:T.sub,fontWeight:600,marginBottom:6}}>VÍDEO</div>
-              <a href={selVar.video} target="_blank" rel="noreferrer" style={{display:"flex",alignItems:"center",gap:8,background:T.surface,borderRadius:10,padding:"10px 14px",color:T.accent,textDecoration:"none",fontSize:13,fontWeight:600}}>
-                ▶ Ver vídeo explicativo
-              </a>
+              {(()=>{
+                const url=selVar.video;
+                const ytMatch=url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|shorts\/|embed\/))([a-zA-Z0-9_-]{11})/);
+                if(ytMatch){
+                  return(
+                    <div style={{position:"relative",paddingBottom:"56.25%",height:0,borderRadius:12,overflow:"hidden"}}>
+                      <iframe src={`https://www.youtube.com/embed/${ytMatch[1]}`} style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",border:"none"}} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen title="Tutorial"/>
+                    </div>
+                  );
+                }
+                return(
+                  <a href={url} target="_blank" rel="noreferrer" style={{display:"flex",alignItems:"center",gap:8,background:T.surface,borderRadius:10,padding:"10px 14px",color:T.accent,textDecoration:"none",fontSize:13,fontWeight:600}}>
+                    ▶ Ver vídeo
+                  </a>
+                );
+              })()}
             </div>
           )}
           {selVar.notes&&selVar.notes.length>0&&(
@@ -737,7 +750,7 @@ function LibraryScreen({exercises,setExercises,T}){
 }
 
 /* ─── ROUTINES ───────────────────────────────── */
-function RoutinesScreen({profile,profiles,routines,setRoutines,exercises,T}){
+function RoutinesScreen({profile,profiles,routines,setRoutines,exercises,setExercises,onStartWorkout,T}){
   // ── All hooks first (React rules) ──
   const[selected,setSelected]=useState(null);
   const[sharingId,setSharingId]=useState(null);
@@ -748,6 +761,9 @@ function RoutinesScreen({profile,profiles,routines,setRoutines,exercises,T}){
   const[newExercises,setNewExercises]=useState([]);
   const[pickingEx,setPickingEx]=useState(false);
   const[exFilter,setExFilter]=useState("Todos");
+  const[creatingExInline,setCreatingExInline]=useState(false);
+  const[inlineExName,setInlineExName]=useState("");
+  const[inlineExPrimary,setInlineExPrimary]=useState("Glúteo");
 
   // ── Derived data ──
   const myRoutines=routines.filter(r=>r.sharedWith&&r.sharedWith.includes(profile.id)&&!r.archived);
@@ -987,8 +1003,40 @@ function RoutinesScreen({profile,profiles,routines,setRoutines,exercises,T}){
       <div className="page" style={{padding:"0 16px 100px"}}>
         <div style={{display:"flex",alignItems:"center",gap:12,padding:"20px 0 14px"}}>
           <BackBtn onClick={()=>setPickingEx(false)} T={T}/>
-          <div style={{fontFamily:"'Plus Jakarta Sans'",fontSize:18,fontWeight:800,color:T.text}}>Añadir ejercicio</div>
+          <div style={{fontFamily:"'Plus Jakarta Sans'",fontSize:18,fontWeight:800,color:T.text,flex:1}}>Añadir ejercicio</div>
+          <Btn T={T} onClick={()=>setCreatingExInline(true)} style={{fontSize:12,padding:"7px 12px"}}>+ Crear</Btn>
         </div>
+        {creatingExInline&&(
+          <Card T={T} style={{marginBottom:14,border:`1px solid ${T.accent}44`}}>
+            <div style={{fontSize:12,color:T.accent,fontWeight:700,marginBottom:10}}>NUEVO EJERCICIO</div>
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              <Input T={T} label="Nombre" value={inlineExName} onChange={setInlineExName} placeholder="Ej: Hip Thrust"/>
+              <div>
+                <div style={{fontSize:11,color:T.sub,fontWeight:600,marginBottom:6}}>GRUPO MUSCULAR</div>
+                <select value={inlineExPrimary} onChange={e=>setInlineExPrimary(e.target.value)} style={{width:"100%",background:"#1c1c22",border:`1px solid ${T.border}`,borderRadius:11,padding:"10px 14px",color:T.text,fontSize:14}}>
+                  {MUSCLE_GROUPS.map(g=><option key={g} value={g}>{g}</option>)}
+                </select>
+              </div>
+              <div style={{display:"flex",gap:8}}>
+                <Btn T={T} onClick={async()=>{
+                  if(!inlineExName.trim()) return;
+                  const id="E"+Date.now();
+                  const varId="V"+Date.now();
+                  const newVar={id:varId,name:inlineExName.trim()+" — "+inlineExPrimary,material:"Máquina",photo:"",video:"",notes:""};
+                  const newEx={id,name:inlineExName.trim(),primary:inlineExPrimary,secondary:"",emoji:"💪",photo:"",variations:[newVar]};
+                  setExercises([...exercises,newEx]);
+                  try{
+                    await sb.post("ejercicios",{id,nombre:newEx.name,grupo_principal:newEx.primary,grupo_secundario:"",emoji:"💪",foto_url:""});
+                    await sb.post("variaciones",{id:varId,ejercicio_id:id,nombre:newVar.name,material:"Máquina",notas:"",foto_url:"",video_url:""});
+                  }catch(e){console.error(e);}
+                  addExToNew(varId);
+                  setCreatingExInline(false);setInlineExName("");setInlineExPrimary("Glúteo");
+                }} full style={{fontSize:12,padding:"9px"}}>✓ Crear y añadir</Btn>
+                <Btn T={T} onClick={()=>setCreatingExInline(false)} variant="ghost" style={{fontSize:12,padding:"9px"}}>✕</Btn>
+              </div>
+            </div>
+          </Card>
+        )}
         <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:12,marginBottom:14}}>
           {["Todos",...MUSCLE_GROUPS].map(g=><Chip key={g} T={T} color={T.accent} active={exFilter===g} onClick={()=>setExFilter(g)}>{g}</Chip>)}
         </div>
@@ -1107,18 +1155,21 @@ function RoutinesScreen({profile,profiles,routines,setRoutines,exercises,T}){
           const owner=profiles.find(p=>p.id===r.ownerId);
           const ownerColor=ACCENT_OPTIONS[owner?.accentIdx]?.val||T.accent;
           return(
-            <Card key={r.id} T={T} onClick={()=>setSelected(r)} accent={r.colorHex}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-                <div>
-                  <div style={{fontSize:28,marginBottom:8}}>{r.emoji}</div>
+            <Card key={r.id} T={T} accent={r.colorHex}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                <div style={{cursor:"pointer",flex:1}} onClick={()=>setSelected(r)}>
+                  <div style={{fontSize:28,marginBottom:6}}>{r.emoji}</div>
                   <div style={{fontFamily:"'Plus Jakarta Sans'",fontSize:18,fontWeight:800,color:T.text}}>{r.name}</div>
                   <div style={{color:T.sub,fontSize:13,marginTop:4}}>{r.exercises.length} ejercicios</div>
                   {owner&&owner.id!==profile.id&&<div style={{display:"flex",alignItems:"center",gap:5,marginTop:6}}><span style={{fontSize:13}}>{owner.emoji}</span><span style={{fontSize:12,color:ownerColor,fontWeight:600}}>de {owner.name}</span></div>}
                 </div>
                 <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6}}>
-                  {r.exercises.slice(0,3).map((e,i)=>{const v=getVar(e.varId,exercises);return v&&v.photo&&v.photo.length>0?<img key={i} src={v.photo} alt="" style={{width:36,height:36,objectFit:"cover",borderRadius:8}}/>:<Badge key={i} color={r.colorHex} T={T}>{v&&v.exercise?v.exercise.emoji:""}</Badge>;})}
+                  {r.exercises.slice(0,3).map((e,i)=>{const v=getVar(e.varId,exercises);return v&&v.photo&&v.photo.length>0?<img key={i} src={v.photo} alt="" style={{width:36,height:36,objectFit:"cover",borderRadius:8,cursor:"pointer"}} onClick={()=>setSelected(r)}/>:<Badge key={i} color={r.colorHex} T={T} style={{cursor:"pointer"}} onClick={()=>setSelected(r)}>{v&&v.exercise?v.exercise.emoji:""}</Badge>;})}
                 </div>
               </div>
+              <button onClick={()=>onStartWorkout&&onStartWorkout({id:Date.now(),userId:profile.id,routineId:r.id,date:new Date().toLocaleDateString("sv-SE"),status:"pending",objetivo:"",hora:""})} className="tap" style={{
+                width:"100%",background:r.colorHex,border:"none",borderRadius:10,padding:"10px",
+                color:"#000",fontSize:14,fontWeight:700,cursor:"pointer"}}>▶ Empezar ahora</button>
             </Card>
           );
         })}
@@ -1802,7 +1853,7 @@ function FreeWorkoutScreen({session,profile,logs,setLogsState,exercises,routines
 }
 
 /* ─── WORKOUT ────────────────────────────────── */
-function WorkoutScreen({session,profile,logs,setLogs,setLogsState,routines,exercises,onFinish,T}){
+function WorkoutScreen({session,profile,logs,setLogs,setLogsState,routines,exercises,onFinish,onPause,T}){
   const routine=getRoutine(session.routineId,routines);
   const[step,setStep]=useState(0);
   const[setsPerEx,setSetsPerEx]=useState({}); // {stepIndex: [sets]}
@@ -1825,8 +1876,8 @@ function WorkoutScreen({session,profile,logs,setLogs,setLogsState,routines,exerc
   const targetSets=curEx?.sets||3;
   const progress=routine?((step+sets.length/targetSets)/routine.exercises.length):0;
 
-  // Get last weight for current exercise
-  const prevLogs=logs.filter(l=>l.userId===profile.id&&l.varId===curEx?.varId&&l.sessionId!==session.id);
+  // Get last weight for CURRENT exercise (use effectiveVarId so it updates when swapped)
+  const prevLogs=logs.filter(l=>l.userId===profile.id&&l.varId===effectiveVarId&&l.sessionId!==session.id);
   const lastWeight=prevLogs.length>0?prevLogs[prevLogs.length-1].kg:null;
   const lastReps=prevLogs.length>0?prevLogs[prevLogs.length-1].reps:null;
 
@@ -1845,7 +1896,7 @@ function WorkoutScreen({session,profile,logs,setLogs,setLogsState,routines,exerc
       });
     }catch(e){console.error("Error guardando serie:",e);}
     if(sets.length+1>=targetSets&&step+1<routine.exercises.length)
-      setTimeout(()=>{setStep(step+1);},400);
+      setTimeout(()=>{setStep(step+1);setSwappedVarId(null);setKg("");setReps("");},400);
   };
 
   const saveEditSet=(idx)=>{
@@ -1863,21 +1914,32 @@ function WorkoutScreen({session,profile,logs,setLogs,setLogsState,routines,exerc
       {viewerSrc&&<ImageViewer src={viewerSrc} onClose={()=>setViewerSrc(null)}/>}
       <div style={{padding:"20px 0 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div><div style={{fontSize:11,color:T.sub,fontWeight:600}}>ENTRENANDO</div><div style={{fontFamily:"'Plus Jakarta Sans'",fontSize:22,fontWeight:800}}>{routine?.name}</div></div>
-        <Btn T={T} onClick={onFinish} variant="ghost" style={{fontSize:13,padding:"9px 14px"}}>Terminar</Btn>
+        <div style={{display:"flex",gap:8}}>
+          {onPause&&<Btn T={T} onClick={onPause} variant="ghost" style={{fontSize:13,padding:"9px 14px"}}>⏸ Pausar</Btn>}
+          <Btn T={T} onClick={onFinish} variant="ghost" style={{fontSize:13,padding:"9px 14px"}}>Terminar</Btn>
+        </div>
       </div>
       <div style={{height:4,background:T.border,borderRadius:999,marginBottom:20}}>
         <div style={{height:"100%",width:`${progress*100}%`,background:T.accent,borderRadius:999,transition:"width .4s"}}/>
       </div>
       <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:12,marginBottom:20}}>
         {routine?.exercises.map((e,i)=>{const v=getVar(e.varId,exercises);const done=(setsPerEx[i]||[]).length>=(routine?.exercises[i]?.sets||3);const active=i===step;return(
-          <div key={i} onClick={()=>{setStep(i);setSwappedVarId(null);setSwappingEx(false);}} className="tap" style={{flexShrink:0,padding:"8px 14px",borderRadius:12,background:active?T.accent+"22":done?T.blue+"15":T.card,border:`1px solid ${active?T.accent:done?T.blue+"44":T.border}`,color:active?T.accent:done?T.blue:T.sub,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+          <div key={i} onClick={()=>{setStep(i);setSwappedVarId(null);setSwappingEx(false);setKg("");setReps("");}} className="tap" style={{flexShrink:0,padding:"8px 14px",borderRadius:12,background:active?T.accent+"22":done?T.blue+"15":T.card,border:`1px solid ${active?T.accent:done?T.blue+"44":T.border}`,color:active?T.accent:done?T.blue:T.sub,fontSize:12,fontWeight:600,cursor:"pointer"}}>
             {done?"✓ ":""}{v?.exercise?.emoji} {v?.exercise?.name}
           </div>
         );})}
       </div>
       {curVar&&(<>
         <Card T={T} accent={T.accent} style={{marginBottom:16}}>
-          {curVar.photo&&curVar.photo.length>4&&(
+          {curVar.video&&curVar.video.length>4&&(()=>{
+            const ytMatch=curVar.video.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|shorts\/|embed\/))([a-zA-Z0-9_-]{11})/);
+            return ytMatch?(
+              <div style={{position:"relative",paddingBottom:"56.25%",height:0,borderRadius:10,overflow:"hidden",marginBottom:12}}>
+                <iframe src={`https://www.youtube.com/embed/${ytMatch[1]}`} style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",border:"none"}} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen title="Tutorial"/>
+              </div>
+            ):null;
+          })()}
+          {(!curVar.video||!curVar.video.length)&&curVar.photo&&curVar.photo.length>4&&(
             <img src={curVar.photo} alt="" onClick={()=>setViewerSrc(curVar.photo)}
               style={{width:"100%",height:140,objectFit:"cover",borderRadius:10,marginBottom:12,cursor:"zoom-in"}}/>
           )}
@@ -1917,11 +1979,8 @@ function WorkoutScreen({session,profile,logs,setLogs,setLogsState,routines,exerc
                 {allVars.filter(v=>swapFilter==="Todos"||(v.exercise.primary===swapFilter||v.exercise.secondary===swapFilter)).map(v=>(
                   <div key={v.id} onClick={()=>{
                     setSwappingEx(false);setSwapFilter("Todos");
-                    // Update the current exercise in the routine (local only)
-                    const newEx=[...routine.exercises];
-                    newEx[step]={...newEx[step],varId:v.id};
-                    // We can't modify routine directly, but we can track the swap
                     setSwappedVarId(v.id);
+                    setKg("");setReps("");setFeel("Bien");
                   }} className="tap" style={{
                     display:"flex",alignItems:"center",gap:10,padding:"10px 12px",
                     borderRadius:10,background:v.id===curEx.varId?T.accent+"15":T.surface,
@@ -1992,7 +2051,7 @@ function WorkoutScreen({session,profile,logs,setLogs,setLogsState,routines,exerc
             <div style={{fontSize:32,marginBottom:8}}>💪</div>
             <div style={{fontFamily:"'Plus Jakarta Sans'",fontSize:18,fontWeight:800,marginBottom:4}}>¡Ejercicio completado!</div>
             <div style={{color:T.sub,fontSize:13,marginBottom:16}}>Tómate un descanso</div>
-            <Btn T={T} onClick={()=>{setStep(step+1);}} full>→ Siguiente ejercicio</Btn>
+            <Btn T={T} onClick={()=>{setStep(step+1);setSwappedVarId(null);setKg("");setReps("");}} full>→ Siguiente ejercicio</Btn>
           </Card>
         )}
         {sets.length>=targetSets&&step+1>=(routine?.exercises.length||0)&&(
@@ -2727,6 +2786,7 @@ export default function App(){
   const[profile,setProfile]=useState(null);
   const[tab,setTab]=useState("home");
   const[activeWorkout,setActiveWorkout]=useState(null);
+  const[workoutPaused,setWorkoutPaused]=useState(false);
   const[reviewingSession,setReviewingSession]=useState(null);
   const[sessions,setSessionsState]=useState([]);
   const[logs,setLogsState]=useState([]);
@@ -2814,50 +2874,56 @@ export default function App(){
   };
 
   const setSessions = async (newSessions) => {
-    setSessionsState(newSessions);
-    if(!dbReady) return;
-    if(!Array.isArray(newSessions)) return;
+    // Use functional update with ref to always compare against the LATEST state,
+    // not a stale closure value
+    setSessionsState(prevSessions => {
+      const oldSessions = prevSessions;
 
-    // Find all added sessions (multiple for group)
-    const addedList = newSessions.filter(s => Number(s.id) > 1000000000000 && !sessions.find(x=>x.id===s.id));
-    if(addedList.length>0) {
-      for(const added of addedList){
-        await sb.post("sesiones",{
-          usuario_id:added.userId, rutina_id:added.routineId==="free"?null:added.routineId,
-          fecha:added.date, estado:added.status, objetivo:added.objetivo||"",
-          es_libre:added.routineId==="free",
-          group_id:added.groupId||null,
-          group_participants:added.groupParticipants||null
-        });
-      }
-      return;
-    }
+      // Detect additions (new sessions not in old state)
+      const addedList = newSessions.filter(s => !oldSessions.find(x=>x.id===s.id));
+      addedList.forEach(async (added) => {
+        if(!dbReady) return;
+        try{
+          await sb.post("sesiones",{
+            usuario_id:added.userId, rutina_id:added.routineId==="free"?null:added.routineId,
+            fecha:added.date, hora:added.hora||null, estado:added.status, objetivo:added.objetivo||"",
+            es_libre:added.routineId==="free",
+            group_id:added.groupId||null,
+            group_participants:added.groupParticipants||null
+          });
+        }catch(e){console.error("Error creando sesión:",e);}
+      });
 
-    // Deleted
-    const deletedList = sessions.filter(s => !newSessions.find(x=>x.id===s.id));
-    if(deletedList.length>0){
-      for(const deleted of deletedList){
-        await sb.delete("sesiones",`id=eq.${deleted.id}`);
-      }
-      return;
-    }
+      // Detect deletions (sessions in old state but not in new)
+      const deletedList = oldSessions.filter(s => !newSessions.find(x=>x.id===s.id));
+      deletedList.forEach(async (deleted) => {
+        if(!dbReady) return;
+        try{ await sb.delete("sesiones",`id=eq.${deleted.id}`); }
+        catch(e){console.error("Error borrando sesión:",e);}
+      });
 
-    // Updated status
-    const updated = newSessions.find(s => {
-      const old = sessions.find(x=>x.id===s.id);
-      return old && old.status !== s.status;
-    });
-    if(updated) await sb.patch("sesiones",`id=eq.${updated.id}`,{estado:updated.status});
+      // Detect updates (same id, different content)
+      newSessions.forEach(async (s) => {
+        const old = oldSessions.find(x=>x.id===s.id);
+        if(!old) return; // it's an addition, already handled
+        if(!dbReady) return;
+        const statusChanged = old.status !== s.status;
+        const fieldsChanged = old.date!==s.date || old.routineId!==s.routineId || old.objetivo!==s.objetivo || old.hora!==s.hora;
+        if(statusChanged && !fieldsChanged) {
+          try{ await sb.patch("sesiones",`id=eq.${s.id}`,{estado:s.status}); }
+          catch(e){console.error("Error actualizando estado:",e);}
+        } else if(fieldsChanged) {
+          try{
+            await sb.patch("sesiones",`id=eq.${s.id}`,{
+              fecha:s.date, hora:s.hora||null, rutina_id:s.routineId==="free"?null:s.routineId,
+              objetivo:s.objetivo||"", es_libre:s.routineId==="free", estado:s.status,
+              group_id:s.groupId||null, group_participants:s.groupParticipants||null
+            });
+          }catch(e){console.error("Error actualizando sesión:",e);}
+        }
+      });
 
-    // Updated fields (edit) — check for date/routine/objetivo changes
-    const edited = newSessions.find(s => {
-      const old = sessions.find(x=>x.id===s.id);
-      return old && (old.date!==s.date || old.routineId!==s.routineId || old.objetivo!==s.objetivo);
-    });
-    if(edited) await sb.patch("sesiones",`id=eq.${edited.id}`,{
-      fecha:edited.date, rutina_id:edited.routineId==="free"?null:edited.routineId,
-      objetivo:edited.objetivo||"", es_libre:edited.routineId==="free",
-      group_id:edited.groupId||null, group_participants:edited.groupParticipants||null
+      return newSessions;
     });
   };
 
@@ -2895,7 +2961,7 @@ export default function App(){
       const updated=sessions.map(s=>s.id===activeWorkout.id?{...s,status:"done"}:s);
       await setSessions(updated);
     }
-    setActiveWorkout(null);setTab("home");
+    setActiveWorkout(null);setWorkoutPaused(false);setTab("home");
   };
 
   if(loading){
@@ -2920,15 +2986,25 @@ export default function App(){
         <div style={{fontFamily:"'Plus Jakarta Sans'",fontSize:20,fontWeight:800,letterSpacing:2,color:T.accent}}>FITLAB</div>
         <button onClick={()=>setTab("settings")} className="tap" style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:"6px 12px",color:T.sub,fontSize:12,cursor:"pointer",fontWeight:600}}>{liveProfile.emoji} {liveProfile.name}</button>
       </div>
-      {activeWorkout?(
+      {activeWorkout&&!workoutPaused?(
         activeWorkout.routineId==="free"
           ?<FreeWorkoutScreen session={activeWorkout} profile={liveProfile} logs={logs} setLogsState={setLogsState} exercises={exercises} routines={routines} setRoutines={setRoutines} onFinish={finishWorkout} T={T}/>
-          :<WorkoutScreen session={activeWorkout} profile={liveProfile} logs={logs} setLogs={setLogs} setLogsState={setLogsState} routines={routines} exercises={exercises} onFinish={finishWorkout} T={T}/>
+          :<WorkoutScreen session={activeWorkout} profile={liveProfile} logs={logs} setLogs={setLogs} setLogsState={setLogsState} routines={routines} exercises={exercises} onFinish={finishWorkout} onPause={()=>setWorkoutPaused(true)} T={T}/>
       ):(
         <>
-          {tab==="home"&&<HomeScreen profile={liveProfile} sessions={sessions} logs={logs} routines={routines} exercises={exercises} onStartWorkout={s=>{setActiveWorkout(s);}} onGoTo={setTab} T={T}/>}
+          {activeWorkout&&workoutPaused&&(
+            <div onClick={()=>setWorkoutPaused(false)} style={{
+              position:"sticky",top:0,zIndex:100,
+              background:T.accent,color:"#000",padding:"10px 16px",
+              display:"flex",justifyContent:"space-between",alignItems:"center",
+              cursor:"pointer",fontWeight:700,fontSize:13,marginBottom:8}}>
+              <span>⏸ Entreno pausado — {getRoutine(activeWorkout.routineId,routines)?.name||"Rutina libre"}</span>
+              <span style={{background:"#000",color:T.accent,borderRadius:8,padding:"4px 12px",fontSize:12}}>Volver ▶</span>
+            </div>
+          )}
+          {tab==="home"&&<HomeScreen profile={liveProfile} sessions={sessions} logs={logs} routines={routines} exercises={exercises} onStartWorkout={s=>{setActiveWorkout(s);setWorkoutPaused(false);}} onGoTo={setTab} T={T}/>}
           {tab==="library"&&<LibraryScreen exercises={exercises} setExercises={setExercises} T={T}/>}
-          {tab==="routines"&&<RoutinesScreen profile={liveProfile} profiles={profiles} routines={routines} setRoutines={setRoutines} exercises={exercises} T={T}/>}
+          {tab==="routines"&&<RoutinesScreen profile={liveProfile} profiles={profiles} routines={routines} setRoutines={setRoutines} exercises={exercises} setExercises={setExercises} onStartWorkout={s=>{setActiveWorkout(s);setWorkoutPaused(false);}} T={T}/>}
           {tab==="calendar"&&<CalendarScreen profile={liveProfile} profiles={profiles} sessions={sessions} setSessions={setSessions} routines={routines} exercises={exercises} T={T}/>}
           {tab==="progress"&&<ProgressScreen profile={liveProfile} logs={logs} setLogs={setLogs} exercises={exercises} sessions={sessions} T={T}/>}
           {tab==="ia"&&<AIScreen profile={liveProfile} exercises={exercises} routines={routines} setRoutines={setRoutines} logs={logs} T={T}/>}
