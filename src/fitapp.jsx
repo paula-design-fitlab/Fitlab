@@ -1867,6 +1867,8 @@ function WorkoutScreen({session,profile,logs,setLogs,setLogsState,routines,exerc
   const[swappingEx,setSwappingEx]=useState(false);
   const[swapFilter,setSwapFilter]=useState("Todos");
   const[swappedVarId,setSwappedVarId]=useState(null);
+  const[addingExToWorkout,setAddingExToWorkout]=useState(false);
+  const[addExFilter,setAddExFilter]=useState("Todos");
   const sets=setsPerEx[step]||[];
   const setSets=(newSets)=>setSetsPerEx(prev=>({...prev,[step]:typeof newSets==="function"?newSets(prev[step]||[]):newSets}));
 
@@ -1928,6 +1930,7 @@ function WorkoutScreen({session,profile,logs,setLogs,setLogsState,routines,exerc
             {done?"✓ ":""}{v?.exercise?.emoji} {v?.exercise?.name}
           </div>
         );})}
+        <button onClick={()=>setAddingExToWorkout(true)} className="tap" style={{flexShrink:0,padding:"8px 14px",borderRadius:12,background:T.accent,border:"none",color:"#000",fontSize:12,fontWeight:700,cursor:"pointer"}}>+ Añadir</button>
       </div>
       {curVar&&(<>
         <Card T={T} accent={T.accent} style={{marginBottom:16}}>
@@ -1962,6 +1965,39 @@ function WorkoutScreen({session,profile,logs,setLogs,setLogsState,routines,exerc
             </div>
           </div>
         </Card>
+
+        {addingExToWorkout&&(()=>{
+          const allVars=exercises.flatMap(ex=>ex.variations.map(v=>({...v,exercise:ex})));
+          const filtered=addExFilter==="Todos"?allVars:allVars.filter(v=>v.exercise.primary===addExFilter||v.exercise.secondary===addExFilter);
+          const existingVarIds=new Set(routine.exercises.map(e=>e.varId));
+          return(
+            <Card T={T} style={{marginBottom:16,border:`1px solid ${T.accent}44`}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                <div style={{fontSize:13,color:T.accent,fontWeight:700}}>AÑADIR EJERCICIO</div>
+                <button onClick={()=>{setAddingExToWorkout(false);setAddExFilter("Todos");}} className="tap"
+                  style={{background:"none",border:"none",color:T.muted,fontSize:16,cursor:"pointer"}}>✕</button>
+              </div>
+              <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:8,marginBottom:10}}>
+                {["Todos",...MUSCLE_GROUPS].map(g=><Chip key={g} T={T} color={T.accent} active={addExFilter===g} onClick={()=>setAddExFilter(g)}>{g}</Chip>)}
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:6,maxHeight:260,overflowY:"auto"}}>
+                {filtered.filter(v=>!existingVarIds.has(v.id)).map(v=>(
+                  <div key={v.id} onClick={()=>{
+                    const newExercise={varId:v.id,sets:3,reps:"10",rir:2};
+                    routine.exercises.push(newExercise);
+                    setStep(routine.exercises.length-1);
+                    setSwappedVarId(null);setKg("");setReps("");
+                    setAddingExToWorkout(false);setAddExFilter("Todos");
+                  }} className="tap" style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:10,background:T.surface,border:`1px solid ${T.border}`,cursor:"pointer"}}>
+                    {v.photo&&v.photo.length>4?<img src={v.photo} alt="" style={{width:40,height:40,objectFit:"cover",borderRadius:8,flexShrink:0}}/>:
+                    <div style={{width:40,height:40,borderRadius:8,background:T.card,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>{v.exercise.emoji}</div>}
+                    <div style={{flex:1}}><div style={{fontSize:13,fontWeight:600,color:T.text}}>{v.name}</div><div style={{fontSize:11,color:T.sub,marginTop:1}}>{v.exercise.primary} · {v.material}</div></div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          );
+        })()}
 
         {swappingEx&&(()=>{
           const allVars=exercises.flatMap(ex=>ex.variations.map(v=>({...v,exercise:ex})));
@@ -3011,7 +3047,7 @@ export default function App(){
           {tab==="settings"&&<SettingsScreen profile={liveProfile} profiles={profiles} setProfiles={setProfiles} onSwitchProfile={()=>setProfile(null)} T={T}/>}
         </>
       )}
-      {!activeWorkout&&<NavBar tab={tab} setTab={setTab} T={T}/>}
+      {(!activeWorkout||workoutPaused)&&<NavBar tab={tab} setTab={setTab} T={T}/>}
     </>
   );
 }
