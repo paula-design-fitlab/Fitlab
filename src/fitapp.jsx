@@ -469,11 +469,25 @@ function HomeScreen({profile,sessions,logs,routines,exercises,onStartWorkout,onG
         </div>
       )}
       <SectionTitle T={T}>HOY</SectionTitle>
+      {/* Botón rutina libre siempre visible */}
+      <button onClick={()=>onStartWorkout({id:Date.now(),userId:profile.id,routineId:"free",date:today,status:"pending",objetivo:"",hora:""})} className="tap" style={{
+        width:"100%",display:"flex",alignItems:"center",gap:14,
+        background:`linear-gradient(135deg,${T.accent}22,${T.accent}08)`,
+        border:`1px solid ${T.accent}44`,borderRadius:16,padding:"16px 18px",
+        cursor:"pointer",marginBottom:16,textAlign:"left"}}>
+        <div style={{width:48,height:48,borderRadius:14,background:T.accent,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>🎲</div>
+        <div>
+          <div style={{fontFamily:"'Plus Jakarta Sans'",fontSize:16,fontWeight:800,color:T.accent}}>Rutina libre</div>
+          <div style={{fontSize:12,color:T.sub,marginTop:2}}>Elige los ejercicios sobre la marcha</div>
+        </div>
+        <div style={{marginLeft:"auto",fontSize:20,color:T.accent}}>▶</div>
+      </button>
+
       {todaySess.length===0?(
-        <Card T={T} style={{textAlign:"center",padding:24,marginBottom:20}}>
-          <div style={{fontSize:32,marginBottom:8}}>😴</div>
+        <Card T={T} style={{textAlign:"center",padding:20,marginBottom:20}}>
+          <div style={{fontSize:28,marginBottom:6}}>😴</div>
           <div style={{color:T.sub,fontSize:14}}>Sin entreno planificado hoy</div>
-          <Btn T={T} onClick={()=>onGoTo("calendar")} variant="ghost" style={{marginTop:14,fontSize:13,padding:"10px 16px"}}>Planificar sesión</Btn>
+          <Btn T={T} onClick={()=>onGoTo("calendar")} variant="ghost" style={{marginTop:12,fontSize:13,padding:"9px 16px"}}>Planificar sesión</Btn>
         </Card>
       ):todaySess.map(s=>{const r=getRoutine(s.routineId,routines);return(
         <Card key={s.id} T={T} accent={r?.colorHex} style={{marginBottom:12}}>
