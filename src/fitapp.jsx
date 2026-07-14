@@ -93,6 +93,7 @@ const PROFILES_INIT=[
   {id:4,name:"Lucía",emoji:"🌙",accentIdx:3,objetivo:"Definir y tonificar",altura:170,pesoInicio:74},
 ];
 const OBJETIVOS=["Definir y tonificar","Hipertrofia","Fuerza","Resistencia","Pérdida de grasa","Salud","Mantenimiento"];
+const MUSCLE_EMOJI={"Glúteo":"🍑","Pierna":"🦵","Pecho":"🎯","Espalda":"🏋️","Hombro":"⬆️","Brazo":"💪","Abdomen":"🔥","Cardio":"🏃","Fullbody":"🔄"};
 const OBJETIVO_ICONS={"Definir y tonificar":"✨","Hipertrofia":"💪","Fuerza":"🏋️","Resistencia":"🏃","Pérdida de grasa":"🔥","Salud":"💚","Mantenimiento":"⚖️"};
 const MUSCLE_GROUPS=["Glúteo","Pierna","Pecho","Espalda","Hombro","Brazo","Abdomen","Cardio","Fullbody"];
 const EXERCISES_INIT=[
@@ -538,12 +539,13 @@ function LibraryScreen({exercises,setExercises,T}){
 
   const saveNewExercise=async()=>{
     if(!newExName.trim()) return;
+    const autoEmoji=MUSCLE_EMOJI[newExPrimary]||"💪";
     const id="E"+Date.now();
-    const newEx={id,name:newExName.trim(),primary:newExPrimary,secondary:newExSecondary,emoji:newExEmoji,photo:"",variations:[]};
+    const newEx={id,name:newExName.trim(),primary:newExPrimary,secondary:newExSecondary,emoji:autoEmoji,photo:"",variations:[]};
     setExercises([...exercises,newEx]);
-    try{ await sb.post("ejercicios",{id,nombre:newExName.trim(),grupo_principal:newExPrimary,grupo_secundario:newExSecondary,emoji:newExEmoji,foto_url:""}); }
+    try{ await sb.post("ejercicios",{id,nombre:newExName.trim(),grupo_principal:newExPrimary,grupo_secundario:newExSecondary,emoji:autoEmoji,foto_url:""}); }
     catch(e){console.error("Error guardando ejercicio:",e);}
-    setCreatingEx(false);setNewExName("");setNewExPrimary("Glúteo");setNewExSecondary("");setNewExEmoji("💪");
+    setCreatingEx(false);setNewExName("");setNewExPrimary("Glúteo");setNewExSecondary("");
     setSelected(newEx);
   };
 
@@ -732,14 +734,12 @@ function LibraryScreen({exercises,setExercises,T}){
               <div style={{fontSize:11,color:T.sub,fontWeight:600,marginBottom:6}}>GRUPO SECUNDARIO (opcional)</div>
               <select value={newExSecondary} onChange={e=>setNewExSecondary(e.target.value)} style={{width:"100%",background:"#1c1c22",border:`1px solid ${T.border}`,borderRadius:11,padding:"11px 14px",color:T.text,fontSize:15}}>
                 <option value="">Ninguno</option>
-                {MUSCLE_GROUPS.map(g=><option key={g} value={g}>{g}</option>)}
+                {MUSCLE_GROUPS.map(g=><option key={g} value={g}>{MUSCLE_EMOJI[g]||""} {g}</option>)}
               </select>
             </div>
-            <div>
-              <div style={{fontSize:11,color:T.sub,fontWeight:600,marginBottom:8}}>EMOJI</div>
-              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                {EMOJIS_EX.map(e=><button key={e} onClick={()=>setNewExEmoji(e)} className="tap" style={{width:40,height:40,fontSize:20,borderRadius:10,cursor:"pointer",background:newExEmoji===e?T.accent+"22":T.surface,border:`1px solid ${newExEmoji===e?T.accent:T.border}`}}>{e}</button>)}
-              </div>
+            <div style={{display:"flex",alignItems:"center",gap:10,background:T.surface,borderRadius:10,padding:"10px 14px"}}>
+              <span style={{fontSize:28}}>{MUSCLE_EMOJI[newExPrimary]||"💪"}</span>
+              <span style={{fontSize:13,color:T.sub}}>Emoji asignado automáticamente al grupo muscular</span>
             </div>
             <div style={{display:"flex",gap:8}}>
               <Btn T={T} onClick={saveNewExercise} full>✓ Guardar</Btn>
@@ -778,6 +778,8 @@ function RoutinesScreen({profile,profiles,routines,setRoutines,exercises,setExer
   const[creatingExInline,setCreatingExInline]=useState(false);
   const[inlineExName,setInlineExName]=useState("");
   const[inlineExPrimary,setInlineExPrimary]=useState("Glúteo");
+  const[inlineExSecondary,setInlineExSecondary]=useState("");
+  const[inlineExMaterial,setInlineExMaterial]=useState("Máquina");
 
   // ── Derived data ──
   const myRoutines=routines.filter(r=>r.sharedWith&&r.sharedWith.includes(profile.id)&&!r.archived);
@@ -1022,31 +1024,50 @@ function RoutinesScreen({profile,profiles,routines,setRoutines,exercises,setExer
         </div>
         {creatingExInline&&(
           <Card T={T} style={{marginBottom:14,border:`1px solid ${T.accent}44`}}>
-            <div style={{fontSize:12,color:T.accent,fontWeight:700,marginBottom:10}}>NUEVO EJERCICIO</div>
-            <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              <Input T={T} label="Nombre" value={inlineExName} onChange={setInlineExName} placeholder="Ej: Hip Thrust"/>
+            <div style={{fontSize:12,color:T.accent,fontWeight:700,marginBottom:12}}>NUEVO EJERCICIO</div>
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              <Input T={T} label="Nombre del ejercicio" value={inlineExName} onChange={setInlineExName} placeholder="Ej: Hip Thrust"/>
               <div>
-                <div style={{fontSize:11,color:T.sub,fontWeight:600,marginBottom:6}}>GRUPO MUSCULAR</div>
-                <select value={inlineExPrimary} onChange={e=>setInlineExPrimary(e.target.value)} style={{width:"100%",background:"#1c1c22",border:`1px solid ${T.border}`,borderRadius:11,padding:"10px 14px",color:T.text,fontSize:14}}>
-                  {MUSCLE_GROUPS.map(g=><option key={g} value={g}>{g}</option>)}
+                <div style={{fontSize:11,color:T.sub,fontWeight:600,marginBottom:6}}>GRUPO PRINCIPAL</div>
+                <select value={inlineExPrimary} onChange={e=>setInlineExPrimary(e.target.value)} style={{width:"100%",background:"#1c1c22",border:`1px solid ${T.border}`,borderRadius:11,padding:"11px 14px",color:T.text,fontSize:15}}>
+                  {MUSCLE_GROUPS.map(g=><option key={g} value={g}>{MUSCLE_EMOJI[g]||""} {g}</option>)}
                 </select>
+              </div>
+              <div>
+                <div style={{fontSize:11,color:T.sub,fontWeight:600,marginBottom:6}}>GRUPO SECUNDARIO (opcional)</div>
+                <select value={inlineExSecondary} onChange={e=>setInlineExSecondary(e.target.value)} style={{width:"100%",background:"#1c1c22",border:`1px solid ${T.border}`,borderRadius:11,padding:"11px 14px",color:T.text,fontSize:15}}>
+                  <option value="">Ninguno</option>
+                  {MUSCLE_GROUPS.map(g=><option key={g} value={g}>{MUSCLE_EMOJI[g]||""} {g}</option>)}
+                </select>
+              </div>
+              <div>
+                <div style={{fontSize:11,color:T.sub,fontWeight:600,marginBottom:6}}>MATERIAL / VARIACIÓN</div>
+                <select value={inlineExMaterial} onChange={e=>setInlineExMaterial(e.target.value)} style={{width:"100%",background:"#1c1c22",border:`1px solid ${T.border}`,borderRadius:11,padding:"11px 14px",color:T.text,fontSize:15}}>
+                  {["Máquina","Multipower","Barra libre","Mancuerna","Polea","Kettlebells","Banda elástica","Peso corporal","Esterilla","Discos"].map(m=><option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:10,background:T.surface,borderRadius:10,padding:"10px 14px"}}>
+                <span style={{fontSize:28}}>{MUSCLE_EMOJI[inlineExPrimary]||"💪"}</span>
+                <span style={{fontSize:13,color:T.sub}}>Emoji asignado automáticamente</span>
               </div>
               <div style={{display:"flex",gap:8}}>
                 <Btn T={T} onClick={async()=>{
                   if(!inlineExName.trim()) return;
+                  const autoEmoji=MUSCLE_EMOJI[inlineExPrimary]||"💪";
                   const id="E"+Date.now();
-                  const varId="V"+Date.now();
-                  const newVar={id:varId,name:inlineExName.trim()+" — "+inlineExPrimary,material:"Máquina",photo:"",video:"",notes:""};
-                  const newEx={id,name:inlineExName.trim(),primary:inlineExPrimary,secondary:"",emoji:"💪",photo:"",variations:[newVar]};
+                  const varId="V"+(Date.now()+1);
+                  const varName=inlineExName.trim()+(inlineExMaterial?" — "+inlineExMaterial:"");
+                  const newVar={id:varId,name:varName,material:inlineExMaterial,photo:"",video:"",notes:""};
+                  const newEx={id,name:inlineExName.trim(),primary:inlineExPrimary,secondary:inlineExSecondary,emoji:autoEmoji,photo:"",variations:[newVar]};
                   setExercises([...exercises,newEx]);
                   try{
-                    await sb.post("ejercicios",{id,nombre:newEx.name,grupo_principal:newEx.primary,grupo_secundario:"",emoji:"💪",foto_url:""});
-                    await sb.post("variaciones",{id:varId,ejercicio_id:id,nombre:newVar.name,material:"Máquina",notas:"",foto_url:"",video_url:""});
+                    await sb.post("ejercicios",{id,nombre:newEx.name,grupo_principal:newEx.primary,grupo_secundario:inlineExSecondary,emoji:autoEmoji,foto_url:""});
+                    await sb.post("variaciones",{id:varId,ejercicio_id:id,nombre:varName,material:inlineExMaterial,notas:"",foto_url:"",video_url:""});
                   }catch(e){console.error(e);}
                   addExToNew(varId);
-                  setCreatingExInline(false);setInlineExName("");setInlineExPrimary("Glúteo");
-                }} full style={{fontSize:12,padding:"9px"}}>✓ Crear y añadir</Btn>
-                <Btn T={T} onClick={()=>setCreatingExInline(false)} variant="ghost" style={{fontSize:12,padding:"9px"}}>✕</Btn>
+                  setCreatingExInline(false);setInlineExName("");setInlineExPrimary("Glúteo");setInlineExSecondary("");setInlineExMaterial("Máquina");
+                }} full style={{fontSize:13,padding:"10px"}}>✓ Crear y añadir a rutina</Btn>
+                <Btn T={T} onClick={()=>setCreatingExInline(false)} variant="ghost" style={{padding:"10px 14px"}}>✕</Btn>
               </div>
             </div>
           </Card>
